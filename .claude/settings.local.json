@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /home/bailey/Repos/DELTA_ARRAY/delta_array -type d -name \"*arduino*\")",
+      "Read(//home/bailey/Repos/DELTA_ARRAY/delta_array/**)"
+    ]
+  }
+}

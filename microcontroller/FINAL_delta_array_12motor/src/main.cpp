@@ -1,0 +1,167 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_MotorShield.h>
+#include <Adafruit_ADS1X15.h>
+#include "delta_array.pb.h"
+#include "pb_common.h"
+#include "pb.h"
+#include "pb_encode.h"
+#include "pb_decode.h"
+#include <math.h>
+#include "varaibles_and_parameters.h"
+
+void readJointPositions();
+void writeJointPositions();
+void resetJoints();
+void stop();
+void recvWithStartEndMarkers();
+bool decodeNanopbData();
+
+
+void setup() {
+  Serial1.begin(SERIAL_BAUD);
+  while (!Serial1)
+    delay(10);
+
+  MC0.begin();
+  MC1.begin();
+  MC2.begin();
+
+  ADC2.begin(ADC2_ADDR);
+  ADC1.begin(ADC1_ADDR);
+  ADC0.begin(ADC0_ADDR);
+
+  ADC2.setGain(GAIN_ONE);
+  ADC1.setGain(GAIN_ONE);
+  ADC0.setGain(GAIN_ONE);
+
+  for(int i=0; i<NUM_MOTORS; i++){
+    motors[i]->setSpeed(INIT_MOTOR_SPEED);
+    motors[i]->run(RELEASE);
+    delay(10);
+  }
+
+  readJointPositions();
+}
+
+void loop() {
+  recvWithStartEndMarkers();
+  if (newData == true) {
+    if (decodeNanopbData()){
+      writeJointPositions();
+    }
+    newData = false;
+    ndx = 0;
+  }
+}
+
+void readJointPositions(){
+  for(int i = 0; i < NUM_MOTORS; i++){
+    motor_val[i] = adcs[i]->readADC_SingleEnded(channels[i]);
+    joint_positions[i] = motor_val[i] * ADC_TO_POSITION;
+  }
+}
+
+void writeJointPositions(){
+  bool reached_point = false;
+  last_arduino_time = millis();
+  is_movement_done = false;
+  while (!reached_point){
+    current_arduino_time = millis();
+    time_elapsed = float(current_arduino_time - last_arduino_time) / 1000.0;
+    readJointPositions();
+    reached_point = true;
+    for(int i = 0; i < NUM_MOTORS; i++){
+      joint_errors[i] = joint_positions[i] - new_joint_positions[i];
+      float pid = KP * joint_errors[i] + KI * total_joint_errors[i] + KD * (joint_errors[i] - last_joint_errors[i]) / time_elapsed;
+      if(joint_errors[i] > position_threshold){
+        int motor_speed = (int)(min(max(0.0, pid), 1.0) * PWM_MAX);
+        reached_point = false;
+        motors[i]->setSpeed(motor_speed);
+        motors[i]->run(BACKWARD);
+        total_joint_errors[i] += joint_errors[i];
+      }
+      else if(joint_errors[i] < -position_threshold){
+        int motor_speed = (int)(min(max(-1.0, pid), 0.0) * -PWM_MAX);
+        reached_point = false;
+        motors[i]->setSpeed(motor_speed);
+        motors[i]->run(FORWARD);
+        total_joint_errors[i] += joint_errors[i];
+      }
+      else{
+        motors[i]->setSpeed(0);
+        motors[i]->run(RELEASE);
+        total_joint_errors[i] = 0.0;
+      }
+      last_joint_errors[i] = joint_errors[i];
+    }
+    last_arduino_time = current_arduino_time;
+  }
+  for(int i = 0; i < NUM_MOTORS; i++){
+    motors[i]->setSpeed(0);
+    motors[i]->run(RELEASE);
+    total_joint_errors[i] = 0.0;
+  }
+  is_movement_done = true;
+}
+
+void resetJoints(){
+  for(int i = 0; i < NUM_MOTORS; i++){
+    new_joint_positions[i] = 0.0;
+  }
+  writeJointPositions();
+}
+
+void stop(){
+  for(int i = 0; i < NUM_MOTORS; i++){
+    motors[i]->run(RELEASE);
+  }
+}
+
+void recvWithStartEndMarkers() {
+  byte rc;
+  while (Serial1.available() > 0 && newData == false) {
+    rc = Serial1.read();
+    if (recvInProgress == true) {
+      if (rc != endMarker) {
+        input_cmd[ndx] = rc;
+        ndx++;
+        if (ndx >= NUM_CHARS) {
+          ndx = NUM_CHARS - 1;
+        }
+      }
+      else {
+        input_cmd[ndx] = '\0';
+        recvInProgress = false;
+        newData = true;
+      }
+    }
+    else if (rc == startMarker) {
+      recvInProgress = true;
+    }
+  }
+}
+
+bool decodeNanopbData(){  
+  DeltaMessage message = DeltaMessage_init_zero;
+  pb_istream_t istream = pb_istream_from_buffer(input_cmd, ndx);
+  bool ret = pb_decode(&istream, DeltaMessage_fields, &message);
+  if (message.id == MY_ID){
+    if (message.request_done_state){
+    }
+    else if (message.reset){
+      for (int i=0; i<NUM_MOTORS; i++){
+        new_joint_positions[i] = RESET_POSITION;
+      }
+    }
+    else{
+      for (int i=0; i<NUM_MOTORS; i++){
+        new_joint_positions[i] = message.joint_pos[i];
+      }
+    }
+  }
+  else{
+    ret = false;
+  }
+  return ret;
+}
