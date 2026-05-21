@@ -16,6 +16,7 @@ void resetJoints();
 void stop();
 void recvWithStartEndMarkers();
 bool decodeNanopbData();
+void executeTrajectory();
 
 
 void setup() {
@@ -48,10 +49,15 @@ void loop() {
   recvWithStartEndMarkers();
   if (newData == true) {
     if (decodeNanopbData()){
-      writeJointPositions();
+      if (!go) {
+        writeJointPositions();
+      }
     }
     newData = false;
     ndx = 0;
+  }
+  if (go) {
+    executeTrajectory();
   }
 }
 
@@ -142,7 +148,7 @@ void recvWithStartEndMarkers() {
   }
 }
 
-bool decodeNanopbData(){  
+bool decodeNanopbData(){
   DeltaMessage message = DeltaMessage_init_zero;
   pb_istream_t istream = pb_istream_from_buffer(input_cmd, ndx);
   bool ret = pb_decode(&istream, DeltaMessage_fields, &message);
@@ -153,10 +159,28 @@ bool decodeNanopbData(){
       for (int i=0; i<NUM_MOTORS; i++){
         new_joint_positions[i] = RESET_POSITION;
       }
+      go = false;
     }
     else{
-      for (int i=0; i<NUM_MOTORS; i++){
-        new_joint_positions[i] = message.joint_pos[i];
+      int n = message.joint_pos_count;
+      if (n == NUM_MOTORS){
+        for (int i=0; i<NUM_MOTORS; i++){
+          new_joint_positions[i] = message.joint_pos[i];
+        }
+        go = false;
+      }
+      else if (n > NUM_MOTORS && n <= MAX_TRAJ_FLOATS && (n % NUM_MOTORS) == 0){
+        traj_rows = n / NUM_MOTORS;
+        for (int i=0; i<traj_rows; i++){
+          for (int j=0; j<NUM_MOTORS; j++){
+            trajectory[i][j] = message.joint_pos[i*NUM_MOTORS + j];
+          }
+        }
+        traj_iter = 0;
+        go = true;
+      }
+      else {
+        ret = false;
       }
     }
   }
@@ -164,4 +188,17 @@ bool decodeNanopbData(){
     ret = false;
   }
   return ret;
+}
+
+void executeTrajectory(){
+  if (traj_iter < traj_rows){
+    for (int j=0; j<NUM_MOTORS; j++){
+      new_joint_positions[j] = trajectory[traj_iter][j];
+    }
+    writeJointPositions();
+    traj_iter++;
+  }
+  else {
+    go = false;
+  }
 }

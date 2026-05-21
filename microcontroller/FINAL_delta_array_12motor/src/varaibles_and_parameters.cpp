@@ -49,9 +49,17 @@ uint8_t input_cmd[NUM_CHARS];
 bool newData = false;
 
 boolean recvInProgress = false;
-byte ndx = 0;
+uint16_t ndx = 0;
 char startMarker = 0xA6;
 char endMarker = 0xA7;
+
+// ---------------------------------------------------------
+// Trajectory state
+// ---------------------------------------------------------
+float trajectory[MAX_TRAJ_ROWS][NUM_MOTORS] = {{0.0f}};
+int traj_iter = 0;
+int traj_rows = 0;
+bool go = false;
 
 // ---------------------------------------------------------
 // Control loop state

@@ -15,6 +15,12 @@
 #define INIT_MOTOR_SPEED 150
 
 // ---------------------------------------------------------
+// Trajectory buffer
+// ---------------------------------------------------------
+#define MAX_TRAJ_ROWS 20
+#define MAX_TRAJ_FLOATS (MAX_TRAJ_ROWS * NUM_MOTORS)
+
+// ---------------------------------------------------------
 // I2C addresses
 // ---------------------------------------------------------
 #define MC0_ADDR 0x62
@@ -39,7 +45,9 @@
 // ---------------------------------------------------------
 // Serial buffer
 // ---------------------------------------------------------
-#define NUM_CHARS 128
+// Sized to hold a max-length trajectory: 240 floats packed-encoded (~5 B/float),
+// plus header and bool fields. ~1200 B leaves headroom for the encoded message.
+#define NUM_CHARS 1200
 
 // ---------------------------------------------------------
 // Motor hardware
@@ -81,9 +89,17 @@ extern uint8_t input_cmd[NUM_CHARS];
 extern bool newData;
 
 extern boolean recvInProgress;
-extern byte ndx;
+extern uint16_t ndx;
 extern char startMarker;
 extern char endMarker;
+
+// ---------------------------------------------------------
+// Trajectory state
+// ---------------------------------------------------------
+extern float trajectory[MAX_TRAJ_ROWS][NUM_MOTORS];
+extern int traj_iter;
+extern int traj_rows;
+extern bool go;
 
 // ---------------------------------------------------------
 // Control loop state

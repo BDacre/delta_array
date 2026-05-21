@@ -1,7 +1,7 @@
 from functools import partial
 import numpy as np
 import matplotlib.pyplot as plt
-from Prismatic_Delta import Prismatic_Delta
+from .Prismatic_Delta import Prismatic_Delta
 
 class RoboCoords:
     def __init__(self):

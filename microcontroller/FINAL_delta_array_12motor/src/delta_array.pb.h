@@ -10,13 +10,13 @@
 #endif
 
 /* Struct definitions */
-typedef struct _DeltaMessage { 
-    int32_t id; 
+typedef struct _DeltaMessage {
+    int32_t id;
     pb_size_t joint_pos_count;
-    float joint_pos[12]; 
-    bool request_done_state; 
-    bool request_joint_pose; 
-    bool reset; 
+    float joint_pos[240];
+    bool request_done_state;
+    bool request_joint_pose;
+    bool reset;
 } DeltaMessage;
 
 
@@ -25,8 +25,8 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define DeltaMessage_init_default                {0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
-#define DeltaMessage_init_zero                   {0, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define DeltaMessage_init_default                {0, 0, {0}, 0, 0, 0}
+#define DeltaMessage_init_zero                   {0, 0, {0}, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define DeltaMessage_id_tag                      1
@@ -51,7 +51,7 @@ extern const pb_msgdesc_t DeltaMessage_msg;
 #define DeltaMessage_fields &DeltaMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#define DeltaMessage_size                        77
+#define DeltaMessage_size                        1217
 
 #ifdef __cplusplus
 } /* extern "C" */

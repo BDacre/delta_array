@@ -1,11 +1,11 @@
 from audioop import alaw2lin
 import telnetlib
-import delta_array_pb2
+import python._old.delta_array_pb2 as delta_array_pb2
 import numpy as np
 from serial import Serial
 from math import *
 import time
-from Prismatic_Delta import Prismatic_Delta
+from python._old.Prismatic_Delta import Prismatic_Delta
 
 NUM_MOTORS = 12
 NUM_AGENTS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]

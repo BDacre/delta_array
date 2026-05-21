@@ -8,12 +8,13 @@ from get_coords import RoboCoords
 import get_coords
 
 NUM_MOTORS = 12
-NUM_AGENTS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
-s_p = 1.5 #side length of the platform
-s_b = 4.3 #side length of the base
-l = 4.5 #length of leg attached to platform
+#NUM_AGENTS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
+ACTIVE_AGENTS_BY_ID = [9]
+SIDE_LENGTH_PLATFORM = 1.5 #side length of the platform
+SIDE_LENGTH_BASE = 4.3 #side length of the base
+LEG_LENGTH = 4.5 #length of leg attached to platform
 
-Delta = Prismatic_Delta(s_p, s_b, l)
+Delta = Prismatic_Delta(SIDE_LENGTH_PLATFORM, SIDE_LENGTH_BASE, LEG_LENGTH)
 RC = RoboCoords()
 
 # arduino = Serial('/dev/ttyACM0', 57600)
@@ -23,7 +24,7 @@ RC = RoboCoords()
 
 class DeltaArrayAgent:
     def __init__(self, ser, robot_id):
-        self.arduino = ser
+        self.serial = ser
         self.delta_message = delta_array_pb2.DeltaMessage()
         self.delta_message.id = robot_id
         self.delta_message.request_joint_pose = False
@@ -37,10 +38,10 @@ class DeltaArrayAgent:
 
     # GENERATE RESET and STOP commands in protobuf
     def reset(self):
-        self.arduino.write()
+        self.serial.write()
 
     def stop(self):
-        self.arduino.write()
+        self.serial.write()
 
     # def proto_clear(self):
     #     self.delta_message.Clear()
@@ -52,9 +53,9 @@ class DeltaArrayAgent:
 
     def send_proto_cmd(self, ret_expected = False):
         serialized = self.delta_message.SerializeToString()
-        self.arduino.write(bytes(b'\xa6') + serialized + bytes(b'\xa7'))
+        self.serial.write(bytes(b'\xa6') + serialized + bytes(b'\xa7'))
         if ret_expected:
-            reachedPos = str(self.arduino.readline())
+            reachedPos = str(self.serial.readline())
             # print(reachedPos.split(" "))
             reachedPos = reachedPos.strip().split(" ")
             if self.delta_message.id == int(reachedPos[0].split(':')[-1]):
@@ -73,7 +74,7 @@ class DeltaArrayAgent:
         del self.delta_message.joint_pos[:]
 
     def close(self):
-        self.arduino.close()
+        self.serial.close()
 
     def get_joint_positions(self):
         _ = [self.delta_message.joint_pos.append(0.5) for i in range(12)]
@@ -90,7 +91,7 @@ class DeltaArrayEnv:
     def __init__(self, port):
         self.ser = Serial(port, 57600)
         self.agents = {}
-        for i in NUM_AGENTS:
+        for i in ACTIVE_AGENTS_BY_ID:
             self.agents[i] = DeltaArrayAgent(self.ser, i)
         self.done_states = np.array([0]*12)
         # self.generate_gaits()
@@ -104,7 +105,7 @@ class DeltaArrayEnv:
             pt = np.array(pt)*0.01
             jts.extend(pt)
         
-        for i in NUM_AGENTS:
+        for i in ACTIVE_AGENTS_BY_ID:
             self.agents[i].move_joint_position(jts)
 
 
@@ -123,7 +124,7 @@ class DeltaArrayEnv:
                     for j in range(3):
                         jts.append(pts[j])
                 
-                for i in NUM_AGENTS:
+                for i in ACTIVE_AGENTS_BY_ID:
                     self.agents[i].move_joint_position(jts)
 
         elif traj=="vertical":
@@ -138,10 +139,10 @@ class DeltaArrayEnv:
                     jts.extend(pts2)
                 
             # print(jts)
-            for i in NUM_AGENTS:
+            for i in ACTIVE_AGENTS_BY_ID:
                 self.agents[i].move_joint_position(jts)
                 
-            for i in NUM_AGENTS:
+            for i in ACTIVE_AGENTS_BY_ID:
                 self.agents[i].get_joint_positions()
 
     
@@ -201,12 +202,12 @@ class DeltaArrayEnv:
         a = 0
         while True:
             if a==0:
-                for i in NUM_AGENTS:
+                for i in ACTIVE_AGENTS_BY_ID:
                     pts = RC.get_pattern(i,a)
                     self.agents[i].move_joint_position(pts)
                 a=1
             else:
-                for i in NUM_AGENTS:
+                for i in ACTIVE_AGENTS_BY_ID:
                     pts = RC.get_pattern(i,a)
                     self.agents[i].move_joint_position(pts)
                 a=0
@@ -217,12 +218,12 @@ class DeltaArrayEnv:
         a = 0
         while True:
             if a==0:
-                for i in NUM_AGENTS:
+                for i in ACTIVE_AGENTS_BY_ID:
                     pts = RC.get_pattern(i,a)
                     self.agents[i].move_joint_position(pts)
                 a=1
             else:
-                for i in NUM_AGENTS:
+                for i in ACTIVE_AGENTS_BY_ID:
                     pts = RC.get_pattern(i,a)
                     self.agents[i].move_joint_position(pts)
                 a=0
@@ -233,12 +234,12 @@ class DeltaArrayEnv:
         a = 0
         while True:
             if a==0:
-                for i in NUM_AGENTS:
+                for i in ACTIVE_AGENTS_BY_ID:
                     pts = RC.get_pattern(i,a)
                     self.agents[i].move_joint_position(pts)
                 a=1
             else:
-                for i in NUM_AGENTS:
+                for i in ACTIVE_AGENTS_BY_ID:
                     pts = RC.get_pattern(i,a)
                     self.agents[i].move_joint_position(pts)
                 a=0
