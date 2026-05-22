@@ -10,7 +10,8 @@ license = { text = "MIT" }
 dependencies = [
     "numpy>=1.24",
     "pyserial>=3.5",
-    "protobuf>=3.20,<5",
+    "protobuf>=5",
+    "grpcio-tools",
     "matplotlib>=3.7",
     "ipdb>=0.13",
 ]
