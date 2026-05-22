@@ -1,4 +1,4 @@
-from DeltaArray import DeltaArray
+from scripts._old.DeltaArray import DeltaArray
 import numpy as np
 import time
 

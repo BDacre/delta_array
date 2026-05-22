@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Control library and scripts for the prismatic delta robot array."
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "Bailey Dacre", email = "baileydacre@gmail.com" }]
+authors = [{ name = "Bailey Dacre", email = "baid@itu.com" }]
 license = { text = "MIT" }
 
 dependencies = [

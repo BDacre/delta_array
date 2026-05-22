@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-from Prismatic_Delta import Prismatic_Delta
-from DeltaArray import DeltaArray
+from scripts._old.Prismatic_Delta import Prismatic_Delta
+from scripts._old.DeltaArray import DeltaArray
 
 import time
 import serial
