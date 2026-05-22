@@ -20,8 +20,8 @@ void executeTrajectory();
 
 
 void setup() {
-  Serial1.begin(SERIAL_BAUD);
-  while (!Serial1)
+  Serial.begin(SERIAL_BAUD);
+  while (!Serial)
     delay(10);
 
   MC0.begin();
@@ -43,6 +43,9 @@ void setup() {
   }
 
   readJointPositions();
+
+  Serial.print("READY id=");
+  Serial.println(MY_ID);
 }
 
 void loop() {
@@ -70,9 +73,10 @@ void readJointPositions(){
 
 void writeJointPositions(){
   bool reached_point = false;
-  last_arduino_time = millis();
+  unsigned long move_start_time = millis();
+  last_arduino_time = move_start_time;
   is_movement_done = false;
-  while (!reached_point){
+  while (!reached_point && (millis() - move_start_time) < MOVE_TIMEOUT_MS){
     current_arduino_time = millis();
     time_elapsed = float(current_arduino_time - last_arduino_time) / 1000.0;
     readJointPositions();
@@ -126,8 +130,8 @@ void stop(){
 
 void recvWithStartEndMarkers() {
   byte rc;
-  while (Serial1.available() > 0 && newData == false) {
-    rc = Serial1.read();
+  while (Serial.available() > 0 && newData == false) {
+    rc = Serial.read();
     if (recvInProgress == true) {
       if (rc != endMarker) {
         input_cmd[ndx] = rc;
@@ -153,7 +157,23 @@ bool decodeNanopbData(){
   pb_istream_t istream = pb_istream_from_buffer(input_cmd, ndx);
   bool ret = pb_decode(&istream, DeltaMessage_fields, &message);
   if (message.id == MY_ID){
-    if (message.request_done_state){
+    if (message.request_done_state || message.request_joint_pose){
+      DeltaMessage response = DeltaMessage_init_zero;
+      response.id = MY_ID;
+      if (message.request_joint_pose){
+        readJointPositions();
+        response.joint_pos_count = NUM_MOTORS;
+        for (int i = 0; i < NUM_MOTORS; i++){
+          response.joint_pos[i] = joint_positions[i];
+        }
+      }
+      uint8_t out_buf[256];
+      pb_ostream_t ostream = pb_ostream_from_buffer(out_buf, sizeof(out_buf));
+      pb_encode(&ostream, DeltaMessage_fields, &response);
+      Serial.write((uint8_t)startMarker);
+      Serial.write(out_buf, ostream.bytes_written);
+      Serial.write((uint8_t)endMarker);
+      return false;
     }
     else if (message.reset){
       for (int i=0; i<NUM_MOTORS; i++){

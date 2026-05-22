@@ -42,12 +42,16 @@
 #define PWM_MAX 255.0f
 #define RESET_POSITION 0.05f
 
+// Safety: abort writeJointPositions() if PID can't settle within this window.
+// Prevents the firmware from hanging if a joint oscillates around its target.
+#define MOVE_TIMEOUT_MS 5000UL
+
 // ---------------------------------------------------------
 // Serial buffer
 // ---------------------------------------------------------
 // Sized to hold a max-length trajectory: 240 floats packed-encoded (~5 B/float),
 // plus header and bool fields. ~1200 B leaves headroom for the encoded message.
-#define NUM_CHARS 1200
+#define NUM_CHARS 2048 //Max is (DeltaMessage_size + 16), 1217 for 12*20 but leave headroom for safety
 
 // ---------------------------------------------------------
 // Motor hardware

@@ -1,4 +1,4 @@
-from .agent import DeltaArrayAgent
+from .delta_array_agent import DeltaArrayAgent
 from .constants import (
     ALL_AGENT_IDS,
     DEFAULT_ACTIVE_AGENT_IDS,
@@ -7,7 +7,7 @@ from .constants import (
     MIN_JOINT_POS,
     NUM_MOTORS,
 )
-from .env import DeltaArrayEnv
+from .delta_array_env import DeltaArrayEnv
 from .transport import ProtoTransport
 
 __all__ = [
