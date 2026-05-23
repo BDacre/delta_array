@@ -17,6 +17,9 @@ void stop();
 void recvWithStartEndMarkers();
 bool decodeNanopbData();
 void executeTrajectory();
+static void sendFramedResponse(const DeltaMessage &response);
+static bool handleStatus(const StatusFrame &status);
+static bool handleJoint(const JointFrame &joint);
 
 
 void setup() {
@@ -152,62 +155,89 @@ void recvWithStartEndMarkers() {
   }
 }
 
-bool decodeNanopbData(){
-  DeltaMessage message = DeltaMessage_init_zero;
-  pb_istream_t istream = pb_istream_from_buffer(input_cmd, ndx);
-  bool ret = pb_decode(&istream, DeltaMessage_fields, &message);
-  if (message.id == MY_ID){
-    if (message.request_done_state || message.request_joint_pose){
-      DeltaMessage response = DeltaMessage_init_zero;
-      response.id = MY_ID;
-      if (message.request_joint_pose){
-        readJointPositions();
-        response.joint_pos_count = NUM_MOTORS;
-        for (int i = 0; i < NUM_MOTORS; i++){
-          response.joint_pos[i] = joint_positions[i];
-        }
+static void sendFramedResponse(const DeltaMessage &response){
+  uint8_t out_buf[256];
+  pb_ostream_t ostream = pb_ostream_from_buffer(out_buf, sizeof(out_buf));
+  pb_encode(&ostream, DeltaMessage_fields, &response);
+  Serial.write((uint8_t)startMarker);
+  Serial.write(out_buf, ostream.bytes_written);
+  Serial.write((uint8_t)endMarker);
+}
+
+static bool handleStatus(const StatusFrame &status){
+  DeltaMessage response = DeltaMessage_init_zero;
+  response.id = MY_ID;
+  response.which_payload = DeltaMessage_status_tag;
+  switch (status.which_kind){
+    case StatusFrame_pose_req_tag: {
+      readJointPositions();
+      response.payload.status.which_kind = StatusFrame_pose_resp_tag;
+      response.payload.status.kind.pose_resp.joint_pos_count = NUM_MOTORS;
+      for (int i = 0; i < NUM_MOTORS; i++){
+        response.payload.status.kind.pose_resp.joint_pos[i] = joint_positions[i];
       }
-      uint8_t out_buf[256];
-      pb_ostream_t ostream = pb_ostream_from_buffer(out_buf, sizeof(out_buf));
-      pb_encode(&ostream, DeltaMessage_fields, &response);
-      Serial.write((uint8_t)startMarker);
-      Serial.write(out_buf, ostream.bytes_written);
-      Serial.write((uint8_t)endMarker);
+      sendFramedResponse(response);
       return false;
     }
-    else if (message.reset){
-      for (int i=0; i<NUM_MOTORS; i++){
+    case StatusFrame_done_req_tag: {
+      response.payload.status.which_kind = StatusFrame_done_resp_tag;
+      response.payload.status.kind.done_resp.done = !go;
+      sendFramedResponse(response);
+      return false;
+    }
+    default:
+      return false;
+  }
+}
+
+static bool handleJoint(const JointFrame &joint){
+  switch (joint.which_kind){
+    case JointFrame_move_tag: {
+      const MoveCommand &cmd = joint.kind.move;
+      if (cmd.joint_pos_count != NUM_MOTORS) return false;
+      for (int i = 0; i < NUM_MOTORS; i++){
+        new_joint_positions[i] = cmd.joint_pos[i];
+      }
+      go = false;
+      return true;
+    }
+    case JointFrame_traj_tag: {
+      const TrajectoryCommand &cmd = joint.kind.traj;
+      int n = cmd.joint_pos_count;
+      if (n <= 0 || n > MAX_TRAJ_FLOATS || (n % NUM_MOTORS) != 0) return false;
+      traj_rows = n / NUM_MOTORS;
+      for (int i = 0; i < traj_rows; i++){
+        for (int j = 0; j < NUM_MOTORS; j++){
+          trajectory[i][j] = cmd.joint_pos[i * NUM_MOTORS + j];
+        }
+      }
+      traj_iter = 0;
+      go = true;
+      return true;
+    }
+    case JointFrame_reset_tag: {
+      for (int i = 0; i < NUM_MOTORS; i++){
         new_joint_positions[i] = RESET_POSITION;
       }
       go = false;
+      return true;
     }
-    else{
-      int n = message.joint_pos_count;
-      if (n == NUM_MOTORS){
-        for (int i=0; i<NUM_MOTORS; i++){
-          new_joint_positions[i] = message.joint_pos[i];
-        }
-        go = false;
-      }
-      else if (n > NUM_MOTORS && n <= MAX_TRAJ_FLOATS && (n % NUM_MOTORS) == 0){
-        traj_rows = n / NUM_MOTORS;
-        for (int i=0; i<traj_rows; i++){
-          for (int j=0; j<NUM_MOTORS; j++){
-            trajectory[i][j] = message.joint_pos[i*NUM_MOTORS + j];
-          }
-        }
-        traj_iter = 0;
-        go = true;
-      }
-      else {
-        ret = false;
-      }
-    }
+    default:
+      return false;
   }
-  else{
-    ret = false;
+}
+
+bool decodeNanopbData(){
+  DeltaMessage message = DeltaMessage_init_zero;
+  pb_istream_t istream = pb_istream_from_buffer(input_cmd, ndx);
+  if (!pb_decode(&istream, DeltaMessage_fields, &message)) return false;
+  if (message.id != MY_ID) return false;
+
+  switch (message.which_payload){
+    case DeltaMessage_status_tag: return handleStatus(message.payload.status);
+    case DeltaMessage_joint_tag:  return handleJoint(message.payload.joint);
+    default: return false;
   }
-  return ret;
 }
 
 void executeTrajectory(){

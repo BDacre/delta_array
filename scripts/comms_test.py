@@ -34,20 +34,22 @@ def main() -> None:
     print(f"      drained from serial buffer: {pending!r}" if pending else "      no banner msg (board was probably already running)")
 
     # ---- step 2: send a ping ------------------------------------------------
-    # Build the smallest possible proto: just id=ROBOT_ID and request_joint_pose=True.
+    # Build the smallest possible proto: id=ROBOT_ID and a StatusFrame.pose_req.
     # Wrap it in the firmware's frame markers (0xA6 ... 0xA7). On the wire
-    # this is 6 bytes total:
+    # this is 8 bytes total:
     #   a6           FRAME_START
     #   08 09        field 1 (id), varint(ROBOT_ID)
-    #   20 01        field 4 (request_joint_pose), varint(true)
+    #   12 02        field 2 (status), length-delimited, len=2
+    #     0a 00        nested: field 1 (pose_req), length-delimited, len=0
     #   a7           FRAME_END
     msg = delta_array_pb2.DeltaMessage()
     msg.id = ROBOT_ID
-    msg.request_joint_pose = True
+    msg.status.pose_req.SetInParent()
     frame = FRAME_START + msg.SerializeToString() + FRAME_END
+    EXPECTED_BYTES = 8
     print(f"[2/3] TX [{len(frame)} B]: {frame.hex()}")
-    if len(frame) != 6:
-        print(f"      ERROR: expected 6 B, got {len(frame)} B")
+    if len(frame) != EXPECTED_BYTES:
+        print(f"      ERROR: expected {EXPECTED_BYTES} B, got {len(frame)} B")
         ser.close()
         return
     else:
@@ -55,8 +57,8 @@ def main() -> None:
     ser.write(frame)
 
     # ---- step 3: read reply -------------------------------------------------
-    # The firmware's request_joint_pose branch in decodeNanopbData builds a
-    # DeltaMessage with id=MY_ID and joint_pos populated from the current ADC
+    # The firmware's handleStatus(pose_req) branch builds a DeltaMessage with
+    # id=MY_ID and status.pose_resp.joint_pos populated from the current ADC
     # reads, encodes it with nanopb, and writes it wrapped in 0xA6 ... 0xA7.
     # We read until we see the FRAME_END byte (or RX_TIMEOUT fires), then
     # locate the FRAME_START and decode whatever sits between them as a proto.
@@ -77,15 +79,19 @@ def main() -> None:
     except Exception as exc:
         print(f"FAIL — proto decode error: {exc}")
         return
-    print(f"      decoded: id={reply.id}, joint_pos={list(reply.joint_pos)}")
+
+    has_pose_resp = reply.HasField("status") and reply.status.HasField("pose_resp")
+    joint_pos = list(reply.status.pose_resp.joint_pos) if has_pose_resp else []
+    print(f"      decoded: id={reply.id}, joint_pos={joint_pos}")
 
     # ---- verdict ------------------------------------------------------------
-    if reply.id == ROBOT_ID:
+    if reply.id == ROBOT_ID and has_pose_resp:
         print(f"PASS — host<->firmware comms verified end to end (id={reply.id})")
     else:
-        print(f"FAIL — expected id={ROBOT_ID}, got id={reply.id}")
+        print(f"FAIL — expected id={ROBOT_ID} with status.pose_resp, got id={reply.id}, pose_resp={has_pose_resp}")
         print("       id=0            -> proto decoded but id field absent (firmware response builder broken?)")
         print("       different id    -> wrong board responded (multi-board bus? MY_ID mismatch?)")
+        print("       no pose_resp    -> firmware took wrong handler branch")
         print("       empty/garbage   -> firmware not transmitting (wrong Serial port? stuck in setup()?)")
 
 

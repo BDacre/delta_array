@@ -24,13 +24,31 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11\x64\x65lta_array.proto\"t\n\x0c\x44\x65ltaMessage\x12\n\n\x02id\x18\x01 \x01(\x05\x12\x11\n\tjoint_pos\x18\x02 \x03(\x02\x12\x1a\n\x12request_done_state\x18\x03 \x01(\x08\x12\x1a\n\x12request_joint_pose\x18\x04 \x01(\x08\x12\r\n\x05reset\x18\x05 \x01(\x08\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11\x64\x65lta_array.proto\"\r\n\x0bPoseRequest\"\r\n\x0b\x44oneRequest\"!\n\x0cPoseResponse\x12\x11\n\tjoint_pos\x18\x01 \x03(\x02\"\x1c\n\x0c\x44oneResponse\x12\x0c\n\x04\x64one\x18\x01 \x01(\x08\"\xa1\x01\n\x0bStatusFrame\x12 \n\x08pose_req\x18\x01 \x01(\x0b\x32\x0c.PoseRequestH\x00\x12 \n\x08\x64one_req\x18\x02 \x01(\x0b\x32\x0c.DoneRequestH\x00\x12\"\n\tpose_resp\x18\x03 \x01(\x0b\x32\r.PoseResponseH\x00\x12\"\n\tdone_resp\x18\x04 \x01(\x0b\x32\r.DoneResponseH\x00\x42\x06\n\x04kind\" \n\x0bMoveCommand\x12\x11\n\tjoint_pos\x18\x01 \x03(\x02\"&\n\x11TrajectoryCommand\x12\x11\n\tjoint_pos\x18\x01 \x03(\x02\"\x0e\n\x0cResetCommand\"v\n\nJointFrame\x12\x1c\n\x04move\x18\x01 \x01(\x0b\x32\x0c.MoveCommandH\x00\x12\"\n\x04traj\x18\x02 \x01(\x0b\x32\x12.TrajectoryCommandH\x00\x12\x1e\n\x05reset\x18\x03 \x01(\x0b\x32\r.ResetCommandH\x00\x42\x06\n\x04kind\"c\n\x0c\x44\x65ltaMessage\x12\n\n\x02id\x18\x01 \x01(\x05\x12\x1e\n\x06status\x18\x02 \x01(\x0b\x32\x0c.StatusFrameH\x00\x12\x1c\n\x05joint\x18\x03 \x01(\x0b\x32\x0b.JointFrameH\x00\x42\t\n\x07payloadb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'delta_array_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_DELTAMESSAGE']._serialized_start=21
-  _globals['_DELTAMESSAGE']._serialized_end=137
+  _globals['_POSEREQUEST']._serialized_start=21
+  _globals['_POSEREQUEST']._serialized_end=34
+  _globals['_DONEREQUEST']._serialized_start=36
+  _globals['_DONEREQUEST']._serialized_end=49
+  _globals['_POSERESPONSE']._serialized_start=51
+  _globals['_POSERESPONSE']._serialized_end=84
+  _globals['_DONERESPONSE']._serialized_start=86
+  _globals['_DONERESPONSE']._serialized_end=114
+  _globals['_STATUSFRAME']._serialized_start=117
+  _globals['_STATUSFRAME']._serialized_end=278
+  _globals['_MOVECOMMAND']._serialized_start=280
+  _globals['_MOVECOMMAND']._serialized_end=312
+  _globals['_TRAJECTORYCOMMAND']._serialized_start=314
+  _globals['_TRAJECTORYCOMMAND']._serialized_end=352
+  _globals['_RESETCOMMAND']._serialized_start=354
+  _globals['_RESETCOMMAND']._serialized_end=368
+  _globals['_JOINTFRAME']._serialized_start=370
+  _globals['_JOINTFRAME']._serialized_end=488
+  _globals['_DELTAMESSAGE']._serialized_start=490
+  _globals['_DELTAMESSAGE']._serialized_end=589
 # @@protoc_insertion_point(module_scope)
