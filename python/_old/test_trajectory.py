@@ -1,11 +1,11 @@
 from sympy import Q
-import delta_array_pb2
+import python._old.delta_array_pb2 as delta_array_pb2
 import numpy as np
 from serial import Serial
 from math import *
 import time
-from Prismatic_Delta import Prismatic_Delta
-from FINAL_delta_array_12motor import DeltaArrayAgent
+from python._old.Prismatic_Delta import Prismatic_Delta
+from python._old.FINAL_delta_array_12motor import DeltaArrayAgent
 import telnetlib
 
 # arduino = Serial('COM7', 57600)
