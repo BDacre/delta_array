@@ -27,7 +27,8 @@ void setup() {
   while (!Serial)
     delay(10);
 
-  MC0.begin();
+  // Initialize motor shields and ADCs
+    MC0.begin();
   MC1.begin();
   MC2.begin();
 
