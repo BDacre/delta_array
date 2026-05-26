@@ -17,12 +17,14 @@ message StatusFrame {
 message MoveCommand       { repeated float joint_pos = 1; }
 message TrajectoryCommand { repeated float joint_pos = 1; }
 message ResetCommand      {}
+message StopCommand       {}
 
 message JointFrame {
     oneof kind {
         MoveCommand       move  = 1;
         TrajectoryCommand traj  = 2;
         ResetCommand      reset = 3;
+        StopCommand       stop  = 4;
     }
 }
 

@@ -98,7 +98,9 @@ class DeltaArrayAgent:
         self._send_command(msg)
 
     def stop(self):
-        self.reset()
+        msg = self._envelope()
+        msg.joint.stop.SetInParent()
+        self._send_command(msg)
 
     def close(self):
         self.transport.close()

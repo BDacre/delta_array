@@ -53,12 +53,17 @@ uint8_t startMarker = 0xA6;
 uint8_t endMarker = 0xA7;
 
 // ---------------------------------------------------------
+// Control mode
+// ---------------------------------------------------------
+ControlMode ctrl_mode = CTRL_IDLE;
+unsigned long target_start_ms = 0;
+
+// ---------------------------------------------------------
 // Trajectory state
 // ---------------------------------------------------------
 float trajectory[MAX_TRAJ_ROWS][NUM_MOTORS] = {{0.0f}};
 int traj_iter = 0;
 int traj_rows = 0;
-bool go = false;
 
 // ---------------------------------------------------------
 // Control loop state
@@ -76,4 +81,3 @@ float last_joint_errors[NUM_MOTORS] = {0.0};
 float total_joint_errors[NUM_MOTORS] = {0.0};
 
 int motor_val[NUM_MOTORS] = {0};
-bool is_movement_done = false;

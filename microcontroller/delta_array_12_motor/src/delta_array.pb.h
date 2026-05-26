@@ -62,12 +62,17 @@ typedef struct _ResetCommand {
     char dummy_field;
 } ResetCommand;
 
+typedef struct _StopCommand {
+    char dummy_field;
+} StopCommand;
+
 typedef struct _JointFrame {
     pb_size_t which_kind;
     union {
         MoveCommand move;
         TrajectoryCommand traj;
         ResetCommand reset;
+        StopCommand stop;
     } kind;
 } JointFrame;
 
@@ -104,6 +109,7 @@ extern "C" {
 
 
 
+
 #define CommandAck_status_ENUMTYPE AckStatus
 
 
@@ -117,6 +123,7 @@ extern "C" {
 #define MoveCommand_init_default                 {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define TrajectoryCommand_init_default           {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define ResetCommand_init_default                {0}
+#define StopCommand_init_default                 {0}
 #define JointFrame_init_default                  {0, {MoveCommand_init_default}}
 #define CommandAck_init_default                  {_AckStatus_MIN}
 #define DeltaMessage_init_default                {0, 0, {StatusFrame_init_default}}
@@ -128,6 +135,7 @@ extern "C" {
 #define MoveCommand_init_zero                    {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define TrajectoryCommand_init_zero              {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define ResetCommand_init_zero                   {0}
+#define StopCommand_init_zero                    {0}
 #define JointFrame_init_zero                     {0, {MoveCommand_init_zero}}
 #define CommandAck_init_zero                     {_AckStatus_MIN}
 #define DeltaMessage_init_zero                   {0, 0, {StatusFrame_init_zero}}
@@ -144,6 +152,7 @@ extern "C" {
 #define JointFrame_move_tag                      1
 #define JointFrame_traj_tag                      2
 #define JointFrame_reset_tag                     3
+#define JointFrame_stop_tag                      4
 #define CommandAck_status_tag                    1
 #define DeltaMessage_id_tag                      1
 #define DeltaMessage_status_tag                  2
@@ -198,15 +207,22 @@ X(a, STATIC,   REPEATED, FLOAT,    joint_pos,         1)
 #define ResetCommand_CALLBACK NULL
 #define ResetCommand_DEFAULT NULL
 
+#define StopCommand_FIELDLIST(X, a) \
+
+#define StopCommand_CALLBACK NULL
+#define StopCommand_DEFAULT NULL
+
 #define JointFrame_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,move,kind.move),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,traj,kind.traj),   2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (kind,reset,kind.reset),   3)
+X(a, STATIC,   ONEOF,    MESSAGE,  (kind,reset,kind.reset),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (kind,stop,kind.stop),   4)
 #define JointFrame_CALLBACK NULL
 #define JointFrame_DEFAULT NULL
 #define JointFrame_kind_move_MSGTYPE MoveCommand
 #define JointFrame_kind_traj_MSGTYPE TrajectoryCommand
 #define JointFrame_kind_reset_MSGTYPE ResetCommand
+#define JointFrame_kind_stop_MSGTYPE StopCommand
 
 #define CommandAck_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    status,            1)
@@ -232,6 +248,7 @@ extern const pb_msgdesc_t StatusFrame_msg;
 extern const pb_msgdesc_t MoveCommand_msg;
 extern const pb_msgdesc_t TrajectoryCommand_msg;
 extern const pb_msgdesc_t ResetCommand_msg;
+extern const pb_msgdesc_t StopCommand_msg;
 extern const pb_msgdesc_t JointFrame_msg;
 extern const pb_msgdesc_t CommandAck_msg;
 extern const pb_msgdesc_t DeltaMessage_msg;
@@ -245,6 +262,7 @@ extern const pb_msgdesc_t DeltaMessage_msg;
 #define MoveCommand_fields &MoveCommand_msg
 #define TrajectoryCommand_fields &TrajectoryCommand_msg
 #define ResetCommand_fields &ResetCommand_msg
+#define StopCommand_fields &StopCommand_msg
 #define JointFrame_fields &JointFrame_msg
 #define CommandAck_fields &CommandAck_msg
 #define DeltaMessage_fields &DeltaMessage_msg
@@ -261,6 +279,7 @@ extern const pb_msgdesc_t DeltaMessage_msg;
 #define PoseResponse_size                        60
 #define ResetCommand_size                        0
 #define StatusFrame_size                         62
+#define StopCommand_size                         0
 #define TrajectoryCommand_size                   1200
 
 #ifdef __cplusplus

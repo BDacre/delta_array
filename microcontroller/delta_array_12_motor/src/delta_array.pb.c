@@ -30,6 +30,9 @@ PB_BIND(TrajectoryCommand, TrajectoryCommand, 2)
 PB_BIND(ResetCommand, ResetCommand, AUTO)
 
 
+PB_BIND(StopCommand, StopCommand, AUTO)
+
+
 PB_BIND(JointFrame, JointFrame, 2)
 
 

@@ -11,12 +11,12 @@
 #include "variables_and_parameters.h"
 
 void readJointPositions();
-void writeJointPositions();
-void resetJoints();
-void stop();
+bool runPidStep();
+void releaseAllMotors();
+void resetPidState();
+void loadTrajectoryRow(int row);
 void recvWithStartEndMarkers();
 bool decodeNanopbData();
-void executeTrajectory();
 static void sendFramedResponse(const DeltaMessage &response);
 static void sendAck(AckStatus status);
 static bool handleStatus(const StatusFrame &status);
@@ -74,16 +74,33 @@ void setup() {
 void loop() {
   recvWithStartEndMarkers();
   if (newData == true) {
-    if (decodeNanopbData()){
-      if (!go) {
-        writeJointPositions();
-      }
-    }
+    decodeNanopbData();
     newData = false;
     ndx = 0;
   }
-  if (go) {
-    executeTrajectory();
+
+  if (ctrl_mode == CTRL_IDLE) return;
+
+  bool reached = runPidStep();
+
+  if (ctrl_mode == CTRL_HOLD) {
+    if (reached || (millis() - target_start_ms) > MOVE_TIMEOUT_MS) {
+      releaseAllMotors();
+      ctrl_mode = CTRL_IDLE;
+    }
+    return;
+  }
+
+  // CTRL_TRAJ: advance to next row once joints settle, or on timeout
+  // (timeout per-row so a stuck point doesn't strand the whole trajectory).
+  if (reached || (millis() - target_start_ms) > MOVE_TIMEOUT_MS) {
+    traj_iter++;
+    if (traj_iter < traj_rows) {
+      loadTrajectoryRow(traj_iter);
+    } else {
+      releaseAllMotors();
+      ctrl_mode = CTRL_IDLE;
+    }
   }
 }
 
@@ -94,61 +111,70 @@ void readJointPositions(){
   }
 }
 
-void writeJointPositions(){
-  bool reached_point = false;
-  unsigned long move_start_time = millis();
-  last_arduino_time = move_start_time;
-  is_movement_done = false;
-  while (!reached_point && (millis() - move_start_time) < MOVE_TIMEOUT_MS){
-    current_arduino_time = millis();
-    time_elapsed = float(current_arduino_time - last_arduino_time) / 1000.0;
-    readJointPositions();
-    reached_point = true;
-    for(int i = 0; i < NUM_MOTORS; i++){
-      joint_errors[i] = joint_positions[i] - new_joint_positions[i];
-      float pid = KP * joint_errors[i] + KI * total_joint_errors[i] + KD * (joint_errors[i] - last_joint_errors[i]) / time_elapsed;
-      if(joint_errors[i] > position_threshold){
-        int motor_speed = (int)(min(max(0.0, pid), 1.0) * PWM_MAX);
-        reached_point = false;
-        motors[i]->setSpeed(motor_speed);
-        motors[i]->run(BACKWARD);
-        total_joint_errors[i] += joint_errors[i];
-      }
-      else if(joint_errors[i] < -position_threshold){
-        int motor_speed = (int)(min(max(-1.0, pid), 0.0) * -PWM_MAX);
-        reached_point = false;
-        motors[i]->setSpeed(motor_speed);
-        motors[i]->run(FORWARD);
-        total_joint_errors[i] += joint_errors[i];
-      }
-      else{
-        motors[i]->setSpeed(0);
-        motors[i]->run(RELEASE);
-        total_joint_errors[i] = 0.0;
-      }
-      last_joint_errors[i] = joint_errors[i];
+// One PID iteration toward new_joint_positions[]. Returns true when every
+// joint is within position_threshold of its target. Caller decides what to
+// do next (release, advance trajectory, time out).
+bool runPidStep(){
+  current_arduino_time = millis();
+  time_elapsed = float(current_arduino_time - last_arduino_time) / 1000.0;
+  // First step after a new target: dt would be ~0 and blow up the D term.
+  // Skip derivative this tick by clamping dt to a non-zero floor.
+  if (time_elapsed <= 0.0f) time_elapsed = 0.001f;
+
+  readJointPositions();
+  bool reached = true;
+  for(int i = 0; i < NUM_MOTORS; i++){
+    joint_errors[i] = joint_positions[i] - new_joint_positions[i];
+    float pid = KP * joint_errors[i] + KI * total_joint_errors[i] + KD * (joint_errors[i] - last_joint_errors[i]) / time_elapsed;
+    if(joint_errors[i] > position_threshold){
+      int motor_speed = (int)(min(max(0.0, pid), 1.0) * PWM_MAX);
+      reached = false;
+      motors[i]->setSpeed(motor_speed);
+      motors[i]->run(BACKWARD);
+      total_joint_errors[i] += joint_errors[i];
     }
-    last_arduino_time = current_arduino_time;
+    else if(joint_errors[i] < -position_threshold){
+      int motor_speed = (int)(min(max(-1.0, pid), 0.0) * -PWM_MAX);
+      reached = false;
+      motors[i]->setSpeed(motor_speed);
+      motors[i]->run(FORWARD);
+      total_joint_errors[i] += joint_errors[i];
+    }
+    else{
+      motors[i]->setSpeed(0);
+      motors[i]->run(RELEASE);
+      total_joint_errors[i] = 0.0;
+    }
+    last_joint_errors[i] = joint_errors[i];
   }
+  last_arduino_time = current_arduino_time;
+  return reached;
+}
+
+void releaseAllMotors(){
   for(int i = 0; i < NUM_MOTORS; i++){
     motors[i]->setSpeed(0);
     motors[i]->run(RELEASE);
-    total_joint_errors[i] = 0.0;
   }
-  is_movement_done = true;
 }
 
-void resetJoints(){
+// Clear integral/derivative carry-over before driving toward a new target,
+// otherwise stale error history kicks the first PID step in the wrong
+// direction.
+void resetPidState(){
   for(int i = 0; i < NUM_MOTORS; i++){
-    new_joint_positions[i] = 0.0;
+    last_joint_errors[i] = 0.0f;
+    total_joint_errors[i] = 0.0f;
   }
-  writeJointPositions();
+  last_arduino_time = millis();
+  target_start_ms = last_arduino_time;
 }
 
-void stop(){
-  for(int i = 0; i < NUM_MOTORS; i++){
-    motors[i]->run(RELEASE);
+void loadTrajectoryRow(int row){
+  for (int j = 0; j < NUM_MOTORS; j++){
+    new_joint_positions[j] = trajectory[row][j];
   }
+  resetPidState();
 }
 
 //Cyclic redundancy check (CRC-16/CCITT-FALSE(. Checker for data integrity in serial communication. Uses polynomial 0x1021 and initial value 0xFFFF.)
@@ -267,7 +293,7 @@ static bool handleStatus(const StatusFrame &status){
     }
     case StatusFrame_done_req_tag: {
       response.payload.status.which_kind = StatusFrame_done_resp_tag;
-      response.payload.status.kind.done_resp.done = !go;
+      response.payload.status.kind.done_resp.done = (ctrl_mode == CTRL_IDLE);
       sendFramedResponse(response);
       return false;
     }
@@ -287,7 +313,8 @@ static bool handleJoint(const JointFrame &joint){
       for (int i = 0; i < NUM_MOTORS; i++){
         new_joint_positions[i] = cmd.joint_pos[i];
       }
-      go = false;
+      resetPidState();
+      ctrl_mode = CTRL_HOLD;
       sendAck(AckStatus_ACK_OK);
       return true;
     }
@@ -305,7 +332,8 @@ static bool handleJoint(const JointFrame &joint){
         }
       }
       traj_iter = 0;
-      go = true;
+      loadTrajectoryRow(0);
+      ctrl_mode = CTRL_TRAJ;
       sendAck(AckStatus_ACK_OK);
       return true;
     }
@@ -313,7 +341,14 @@ static bool handleJoint(const JointFrame &joint){
       for (int i = 0; i < NUM_MOTORS; i++){
         new_joint_positions[i] = RESET_POSITION;
       }
-      go = false;
+      resetPidState();
+      ctrl_mode = CTRL_HOLD;
+      sendAck(AckStatus_ACK_OK);
+      return true;
+    }
+    case JointFrame_stop_tag: {
+      releaseAllMotors();
+      ctrl_mode = CTRL_IDLE;
       sendAck(AckStatus_ACK_OK);
       return true;
     }
@@ -333,18 +368,5 @@ bool decodeNanopbData(){
     case DeltaMessage_status_tag: return handleStatus(message.payload.status);
     case DeltaMessage_joint_tag:  return handleJoint(message.payload.joint);
     default: return false;
-  }
-}
-
-void executeTrajectory(){
-  if (traj_iter < traj_rows){
-    for (int j=0; j<NUM_MOTORS; j++){
-      new_joint_positions[j] = trajectory[traj_iter][j];
-    }
-    writeJointPositions();
-    traj_iter++;
-  }
-  else {
-    go = false;
   }
 }

@@ -42,8 +42,10 @@
 #define PWM_MAX 255.0f
 #define RESET_POSITION 0.05f
 
-// Safety: abort writeJointPositions() if PID can't settle within this window.
-// Prevents the firmware from hanging if a joint oscillates around its target.
+// Safety: abort the active move (CTRL_HOLD) if PID can't settle within this
+// window. Prevents a single unreachable target from holding the motors driven
+// forever. Measured from the time the target was accepted. Trajectory rows
+// reset the timer on every advance.
 #define MOVE_TIMEOUT_MS 5000UL
 
 // ---------------------------------------------------------
@@ -102,12 +104,27 @@ extern uint8_t startMarker;
 extern uint8_t endMarker;
 
 // ---------------------------------------------------------
+// Control mode
+// ---------------------------------------------------------
+// CTRL_IDLE: motors released, no active target.
+// CTRL_HOLD: driving toward a single target (MoveCommand / ResetCommand).
+// CTRL_TRAJ: stepping through trajectory[] rows; advances to the next row
+//            once all joints settle within position_threshold.
+enum ControlMode : uint8_t {
+  CTRL_IDLE = 0,
+  CTRL_HOLD = 1,
+  CTRL_TRAJ = 2,
+};
+
+extern ControlMode ctrl_mode;
+extern unsigned long target_start_ms;
+
+// ---------------------------------------------------------
 // Trajectory state
 // ---------------------------------------------------------
 extern float trajectory[MAX_TRAJ_ROWS][NUM_MOTORS];
 extern int traj_iter;
 extern int traj_rows;
-extern bool go;
 
 // ---------------------------------------------------------
 // Control loop state
@@ -125,6 +142,5 @@ extern float last_joint_errors[NUM_MOTORS];
 extern float total_joint_errors[NUM_MOTORS];
 
 extern int motor_val[NUM_MOTORS];
-extern bool is_movement_done;
 
 #endif // VARIABLES_AND_PARAMETERS_H
