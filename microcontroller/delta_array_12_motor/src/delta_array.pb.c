@@ -33,7 +33,12 @@ PB_BIND(ResetCommand, ResetCommand, AUTO)
 PB_BIND(JointFrame, JointFrame, 2)
 
 
+PB_BIND(CommandAck, CommandAck, AUTO)
+
+
 PB_BIND(DeltaMessage, DeltaMessage, 2)
+
+
 
 
 

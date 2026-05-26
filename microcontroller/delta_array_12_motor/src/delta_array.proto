@@ -26,10 +26,25 @@ message JointFrame {
     }
 }
 
+// Acceptance ACK for JointFrame commands. Sent by the addressed board
+// immediately after the command is parsed and validated. It reports whether
+// the command was accepted; it does NOT report move completion (completion
+// is still polled via StatusFrame.done_req).
+enum AckStatus {
+    ACK_OK              = 0;
+    ACK_VALIDATION_FAIL = 1;  // joint_pos count wrong, traj dims invalid, etc.
+    ACK_UNKNOWN_COMMAND = 2;  // unrecognized JointFrame.kind variant
+}
+
+message CommandAck {
+    AckStatus status = 1;
+}
+
 message DeltaMessage {
     int32 id = 1;
     oneof payload {
         StatusFrame status = 2;
         JointFrame  joint  = 3;
+        CommandAck  ack    = 4;
     }
 }

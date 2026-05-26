@@ -1,4 +1,4 @@
-#include "varaibles_and_parameters.h"
+#include "variables_and_parameters.h"
 
 // ---------------------------------------------------------
 // Motor hardware
@@ -48,10 +48,9 @@ int channels[NUM_MOTORS] = {0,1,0,
 uint8_t input_cmd[NUM_CHARS];
 bool newData = false;
 
-boolean recvInProgress = false;
 uint16_t ndx = 0;
-char startMarker = 0xA6;
-char endMarker = 0xA7;
+uint8_t startMarker = 0xA6;
+uint8_t endMarker = 0xA7;
 
 // ---------------------------------------------------------
 // Trajectory state

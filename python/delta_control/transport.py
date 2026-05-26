@@ -1,19 +1,68 @@
 from .constants import FRAME_END, FRAME_START
 
 
+def crc16_ccitt(data: bytes) -> int:
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
+    return crc
+
+
 class ProtoTransport:
+    # Wire format: [START][LEN_LO][LEN_HI][payload...][CRC_LO][CRC_HI][END]
+    # LEN is uint16 little-endian (payload length only). CRC is CRC-16/CCITT-FALSE
+    # over the payload bytes, little-endian. Encoded protobuf can legitimately
+    # contain the start/end byte values, so we read by length and validate with
+    # CRC; the trailing END byte is a final sanity gate, not a delimiter.
+
     def __init__(self, ser):
         self.ser = ser
 
     def send(self, payload: bytes) -> None:
-        self.ser.write(FRAME_START + payload + FRAME_END)
+        n = len(payload)
+        crc = crc16_ccitt(payload)
+        frame = (
+            FRAME_START
+            + bytes((n & 0xFF, (n >> 8) & 0xFF))
+            + payload
+            + bytes((crc & 0xFF, (crc >> 8) & 0xFF))
+            + FRAME_END
+        )
+        self.ser.write(frame)
 
     def read_frame(self) -> bytes | None:
-        raw = self.ser.read_until(FRAME_END)
-        start = raw.rfind(FRAME_START)
-        if start < 0 or not raw.endswith(FRAME_END):
+        # Hunt for the start byte, then read by length and verify CRC. Each
+        # underlying read() returns short on serial timeout, which we treat
+        # as a dropped frame and report as None.
+        while True:
+            b = self.ser.read(1)
+            if not b:
+                return None
+            if b == FRAME_START:
+                break
+
+        header = self.ser.read(2)
+        if len(header) != 2:
             return None
-        return raw[start + 1 : -1]
+        n = header[0] | (header[1] << 8)
+        if n == 0:
+            return None
+
+        payload = self.ser.read(n)
+        if len(payload) != n:
+            return None
+
+        trailer = self.ser.read(3)
+        if len(trailer) != 3:
+            return None
+        crc_rx = trailer[0] | (trailer[1] << 8)
+        if trailer[2:3] != FRAME_END:
+            return None
+        if crc16_ccitt(payload) != crc_rx:
+            return None
+        return payload
 
     def readline(self) -> bytes:
         return self.ser.readline()

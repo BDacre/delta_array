@@ -6,6 +6,7 @@ from serial import Serial
 
 from .delta_array_agent import DeltaArrayAgent
 from .constants import (
+    ACK_TIMEOUT_S,
     DEFAULT_ACTIVE_AGENT_IDS,
     DEFAULT_BAUD,
     HOME_POSITION,
@@ -23,7 +24,9 @@ RC = RoboCoords()
 
 class DeltaArrayEnv:
     def __init__(self, port, *, active_ids=DEFAULT_ACTIVE_AGENT_IDS, baud=DEFAULT_BAUD):
-        self.ser = Serial(port, baud)
+        # timeout bounds how long read_frame() waits before giving up; sized to
+        # tolerate a worst-case in-flight move on the firmware before its ACK.
+        self.ser = Serial(port, baud, timeout=ACK_TIMEOUT_S)
         self.transport = ProtoTransport(self.ser)
         self.active_ids = tuple(active_ids)
         self.agents = {i: DeltaArrayAgent(self.transport, i) for i in self.active_ids}

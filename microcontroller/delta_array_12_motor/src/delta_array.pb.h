@@ -9,6 +9,17 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
+/* Enum definitions */
+/* Acceptance ACK for JointFrame commands. Sent by the addressed board
+ immediately after the command is parsed and validated. It reports whether
+ the command was accepted; it does NOT report move completion (completion
+ is still polled via StatusFrame.done_req). */
+typedef enum _AckStatus {
+    AckStatus_ACK_OK = 0,
+    AckStatus_ACK_VALIDATION_FAIL = 1, /* joint_pos count wrong, traj dims invalid, etc. */
+    AckStatus_ACK_UNKNOWN_COMMAND = 2 /* unrecognized JointFrame.kind variant */
+} AckStatus;
+
 /* Struct definitions */
 typedef struct _PoseRequest {
     char dummy_field;
@@ -60,12 +71,17 @@ typedef struct _JointFrame {
     } kind;
 } JointFrame;
 
+typedef struct _CommandAck {
+    AckStatus status;
+} CommandAck;
+
 typedef struct _DeltaMessage {
     int32_t id;
     pb_size_t which_payload;
     union {
         StatusFrame status;
         JointFrame joint;
+        CommandAck ack;
     } payload;
 } DeltaMessage;
 
@@ -73,6 +89,24 @@ typedef struct _DeltaMessage {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Helper constants for enums */
+#define _AckStatus_MIN AckStatus_ACK_OK
+#define _AckStatus_MAX AckStatus_ACK_UNKNOWN_COMMAND
+#define _AckStatus_ARRAYSIZE ((AckStatus)(AckStatus_ACK_UNKNOWN_COMMAND+1))
+
+
+
+
+
+
+
+
+
+
+#define CommandAck_status_ENUMTYPE AckStatus
+
+
 
 /* Initializer values for message structs */
 #define PoseRequest_init_default                 {0}
@@ -84,6 +118,7 @@ extern "C" {
 #define TrajectoryCommand_init_default           {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define ResetCommand_init_default                {0}
 #define JointFrame_init_default                  {0, {MoveCommand_init_default}}
+#define CommandAck_init_default                  {_AckStatus_MIN}
 #define DeltaMessage_init_default                {0, 0, {StatusFrame_init_default}}
 #define PoseRequest_init_zero                    {0}
 #define DoneRequest_init_zero                    {0}
@@ -94,6 +129,7 @@ extern "C" {
 #define TrajectoryCommand_init_zero              {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define ResetCommand_init_zero                   {0}
 #define JointFrame_init_zero                     {0, {MoveCommand_init_zero}}
+#define CommandAck_init_zero                     {_AckStatus_MIN}
 #define DeltaMessage_init_zero                   {0, 0, {StatusFrame_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -108,9 +144,11 @@ extern "C" {
 #define JointFrame_move_tag                      1
 #define JointFrame_traj_tag                      2
 #define JointFrame_reset_tag                     3
+#define CommandAck_status_tag                    1
 #define DeltaMessage_id_tag                      1
 #define DeltaMessage_status_tag                  2
 #define DeltaMessage_joint_tag                   3
+#define DeltaMessage_ack_tag                     4
 
 /* Struct field encoding specification for nanopb */
 #define PoseRequest_FIELDLIST(X, a) \
@@ -170,14 +208,21 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (kind,reset,kind.reset),   3)
 #define JointFrame_kind_traj_MSGTYPE TrajectoryCommand
 #define JointFrame_kind_reset_MSGTYPE ResetCommand
 
+#define CommandAck_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    status,            1)
+#define CommandAck_CALLBACK NULL
+#define CommandAck_DEFAULT NULL
+
 #define DeltaMessage_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    id,                1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload,status,payload.status),   2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload,joint,payload.joint),   3)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,joint,payload.joint),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload,ack,payload.ack),   4)
 #define DeltaMessage_CALLBACK NULL
 #define DeltaMessage_DEFAULT NULL
 #define DeltaMessage_payload_status_MSGTYPE StatusFrame
 #define DeltaMessage_payload_joint_MSGTYPE JointFrame
+#define DeltaMessage_payload_ack_MSGTYPE CommandAck
 
 extern const pb_msgdesc_t PoseRequest_msg;
 extern const pb_msgdesc_t DoneRequest_msg;
@@ -188,6 +233,7 @@ extern const pb_msgdesc_t MoveCommand_msg;
 extern const pb_msgdesc_t TrajectoryCommand_msg;
 extern const pb_msgdesc_t ResetCommand_msg;
 extern const pb_msgdesc_t JointFrame_msg;
+extern const pb_msgdesc_t CommandAck_msg;
 extern const pb_msgdesc_t DeltaMessage_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
@@ -200,9 +246,11 @@ extern const pb_msgdesc_t DeltaMessage_msg;
 #define TrajectoryCommand_fields &TrajectoryCommand_msg
 #define ResetCommand_fields &ResetCommand_msg
 #define JointFrame_fields &JointFrame_msg
+#define CommandAck_fields &CommandAck_msg
 #define DeltaMessage_fields &DeltaMessage_msg
 
 /* Maximum encoded size of messages (where known) */
+#define CommandAck_size                          2
 #define DELTA_ARRAY_PB_H_MAX_SIZE                DeltaMessage_size
 #define DeltaMessage_size                        1217
 #define DoneRequest_size                         0

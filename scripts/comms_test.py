@@ -12,6 +12,7 @@ from serial import Serial
 
 from delta_control import delta_array_pb2
 from delta_control.constants import DEFAULT_BAUD, FRAME_END, FRAME_START
+from delta_control.transport import ProtoTransport, crc16_ccitt
 
 PORT = "/dev/ttyACM0"
 ROBOT_ID = 9
@@ -28,26 +29,36 @@ def main() -> None:
     # If the board just booted, the firmware printed "READY id=9\r\n" at the
     # end of setup(). If the board was already running before we opened the
     # port (USB CDC does not reset the SAMD21), there will be nothing to
-    # drain. Either outcome is fine; the real comms check is step 5.
-    print("[1/3] draining boot banner  (expect: 'READY id=9' on fresh boot, else nothing)")
+    # drain. Either outcome is fine; the real comms check is step 3.
+    print("Draining serial in case there is anything in buffer")
     pending = ser.read(ser.in_waiting)
-    print(f"      drained from serial buffer: {pending!r}" if pending else "      no banner msg (board was probably already running)")
+    print(f"      drained from serial buffer: {pending!r}" if pending else "      nothing to drain")
 
     # ---- step 2: send a ping ------------------------------------------------
-    # Build the smallest possible proto: id=ROBOT_ID and a StatusFrame.pose_req.
-    # Wrap it in the firmware's frame markers (0xA6 ... 0xA7). On the wire
-    # this is 8 bytes total:
-    #   a6           FRAME_START
+    # Build the smallest possible proto payload: id=ROBOT_ID with a
+    # StatusFrame.pose_req. The encoded proto is 6 bytes:
     #   08 09        field 1 (id), varint(ROBOT_ID)
     #   12 02        field 2 (status), length-delimited, len=2
     #     0a 00        nested: field 1 (pose_req), length-delimited, len=0
-    #   a7           FRAME_END
+    #
+    # Wire frame is [START][LEN_LO LEN_HI][payload][CRC_LO CRC_HI][END],
+    # 12 bytes total. We build it by hand here to exercise the exact bytes
+    # on the wire; ProtoTransport.send() does the same thing programmatically.
     msg = delta_array_pb2.DeltaMessage()
     msg.id = ROBOT_ID
     msg.status.pose_req.SetInParent()
-    frame = FRAME_START + msg.SerializeToString() + FRAME_END
-    EXPECTED_BYTES = 8
-    print(f"[2/3] TX [{len(frame)} B]: {frame.hex()}")
+    payload = msg.SerializeToString()
+    n = len(payload)
+    crc = crc16_ccitt(payload)
+    frame = (
+        FRAME_START
+        + bytes((n & 0xFF, (n >> 8) & 0xFF))
+        + payload
+        + bytes((crc & 0xFF, (crc >> 8) & 0xFF))
+        + FRAME_END
+    )
+    EXPECTED_BYTES = 1 + 2 + n + 2 + 1
+    print(f"[1/2] TX [{len(frame)} B]: {frame.hex()}")
     if len(frame) != EXPECTED_BYTES:
         print(f"      ERROR: expected {EXPECTED_BYTES} B, got {len(frame)} B")
         ser.close()
@@ -59,19 +70,19 @@ def main() -> None:
     # ---- step 3: read reply -------------------------------------------------
     # The firmware's handleStatus(pose_req) branch builds a DeltaMessage with
     # id=MY_ID and status.pose_resp.joint_pos populated from the current ADC
-    # reads, encodes it with nanopb, and writes it wrapped in 0xA6 ... 0xA7.
-    # We read until we see the FRAME_END byte (or RX_TIMEOUT fires), then
-    # locate the FRAME_START and decode whatever sits between them as a proto.
-    print(f"[3/3] reading reply  (expect: proto frame with id={ROBOT_ID} within {RX_TIMEOUT}s)")
-    raw = ser.read_until(FRAME_END)
+    # reads, encodes it with nanopb, and writes it wrapped in the same framing
+    # we used above. Use ProtoTransport to parse it back: hunts for START,
+    # reads by length, verifies CRC, returns the payload bytes (or None on any
+    # framing/CRC failure).
+    print(f"[2/2] reading reply  (expect: proto frame with id={ROBOT_ID} within {RX_TIMEOUT}s)")
+    transport = ProtoTransport(ser)
+    payload = transport.read_frame()
     ser.close()
-    print(f"      RX [{len(raw)} B]: {raw.hex()}")
 
-    start = raw.rfind(FRAME_START)
-    if start < 0 or not raw.endswith(FRAME_END):
-        print(f"FAIL — no valid frame found in reply")
+    if payload is None:
+        print("FAIL — no valid framed reply (timeout, bad length, CRC mismatch, or missing end byte)")
         return
-    payload = raw[start + 1 : -1]
+    print(f"      RX payload [{len(payload)} B]: {payload.hex()}")
 
     reply = delta_array_pb2.DeltaMessage()
     try:

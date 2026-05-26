@@ -8,7 +8,7 @@
 #include "pb_encode.h"
 #include "pb_decode.h"
 #include <math.h>
-#include "varaibles_and_parameters.h"
+#include "variables_and_parameters.h"
 
 void readJointPositions();
 void writeJointPositions();
@@ -18,8 +18,30 @@ void recvWithStartEndMarkers();
 bool decodeNanopbData();
 void executeTrajectory();
 static void sendFramedResponse(const DeltaMessage &response);
+static void sendAck(AckStatus status);
 static bool handleStatus(const StatusFrame &status);
 static bool handleJoint(const JointFrame &joint);
+static uint16_t crc16_ccitt(const uint8_t *data, size_t len);
+
+// If a frame stalls mid-flight (cable yank, host crash), reset the receive
+// state machine rather than blocking on the missing bytes forever.
+static const unsigned long RX_INTERBYTE_TIMEOUT_MS = 100UL;
+
+enum RxState : uint8_t {
+  RX_WAIT_START,
+  RX_LEN_LO,
+  RX_LEN_HI,
+  RX_PAYLOAD,
+  RX_CRC_LO,
+  RX_CRC_HI,
+  RX_END,
+};
+
+static RxState rx_state = RX_WAIT_START;
+static uint16_t rx_expected_len = 0;
+static uint16_t rx_received_len = 0;
+static uint16_t rx_crc_received = 0;
+static unsigned long rx_last_byte_ms = 0;
 
 
 void setup() {
@@ -47,9 +69,6 @@ void setup() {
   }
 
   readJointPositions();
-
-  Serial.print("READY id=");
-  Serial.println(MY_ID);
 }
 
 void loop() {
@@ -132,37 +151,103 @@ void stop(){
   }
 }
 
-void recvWithStartEndMarkers() {
-  byte rc;
-  while (Serial.available() > 0 && newData == false) {
-    rc = Serial.read();
-    if (recvInProgress == true) {
-      if (rc != endMarker) {
-        input_cmd[ndx] = rc;
-        ndx++;
-        if (ndx >= NUM_CHARS) {
-          ndx = NUM_CHARS - 1;
-        }
-      }
-      else {
-        input_cmd[ndx] = '\0';
-        recvInProgress = false;
-        newData = true;
-      }
+//Cyclic redundancy check (CRC-16/CCITT-FALSE(. Checker for data integrity in serial communication. Uses polynomial 0x1021 and initial value 0xFFFF.)
+static uint16_t crc16_ccitt(const uint8_t *data, size_t len) {
+  uint16_t crc = 0xFFFF;
+  for (size_t i = 0; i < len; i++) {
+    crc ^= ((uint16_t)data[i]) << 8;
+    for (uint8_t b = 0; b < 8; b++) {
+      crc = (crc & 0x8000) ? (uint16_t)((crc << 1) ^ 0x1021) : (uint16_t)(crc << 1);
     }
-    else if (rc == startMarker) {
-      recvInProgress = true;
+  }
+  return crc;
+}
+
+void recvWithStartEndMarkers() {
+  // Drop a stalled frame if the host went quiet mid-transmission.
+  if (rx_state != RX_WAIT_START &&
+      (millis() - rx_last_byte_ms) > RX_INTERBYTE_TIMEOUT_MS) {
+    rx_state = RX_WAIT_START;
+  }
+
+  while (Serial.available() > 0 && newData == false) {
+    uint8_t rc = (uint8_t)Serial.read();
+    rx_last_byte_ms = millis();
+
+    switch (rx_state) {
+      case RX_WAIT_START:
+        if (rc == startMarker) {
+          rx_state = RX_LEN_LO;
+        }
+        break;
+
+      case RX_LEN_LO:
+        rx_expected_len = rc;
+        rx_state = RX_LEN_HI;
+        break;
+
+      case RX_LEN_HI:
+        rx_expected_len |= ((uint16_t)rc) << 8;
+        if (rx_expected_len == 0 || rx_expected_len > NUM_CHARS) {
+          // Implausible length: abandon and resync.
+          rx_state = RX_WAIT_START;
+        } else {
+          rx_received_len = 0;
+          rx_state = RX_PAYLOAD;
+        }
+        break;
+
+      case RX_PAYLOAD:
+        input_cmd[rx_received_len++] = rc;
+        if (rx_received_len >= rx_expected_len) {
+          rx_state = RX_CRC_LO;
+        }
+        break;
+
+      case RX_CRC_LO:
+        rx_crc_received = rc;
+        rx_state = RX_CRC_HI;
+        break;
+
+      case RX_CRC_HI:
+        rx_crc_received |= ((uint16_t)rc) << 8;
+        rx_state = RX_END;
+        break;
+
+      case RX_END:
+        if (rc == endMarker &&
+            crc16_ccitt(input_cmd, rx_expected_len) == rx_crc_received) {
+          ndx = rx_expected_len;
+          newData = true;
+        }
+        rx_state = RX_WAIT_START;
+        break;
     }
   }
 }
 
 static void sendFramedResponse(const DeltaMessage &response){
-  uint8_t out_buf[256];
+  uint8_t out_buf[RESPONSE_BUF_BYTES];
   pb_ostream_t ostream = pb_ostream_from_buffer(out_buf, sizeof(out_buf));
-  pb_encode(&ostream, DeltaMessage_fields, &response);
-  Serial.write((uint8_t)startMarker);
-  Serial.write(out_buf, ostream.bytes_written);
-  Serial.write((uint8_t)endMarker);
+  if (!pb_encode(&ostream, DeltaMessage_fields, &response)) return;
+  uint16_t len = (uint16_t)ostream.bytes_written;
+  uint16_t crc = crc16_ccitt(out_buf, len);
+  uint8_t header[3] = { startMarker, (uint8_t)(len & 0xFF), (uint8_t)(len >> 8) };
+  uint8_t trailer[3] = { (uint8_t)(crc & 0xFF), (uint8_t)(crc >> 8), endMarker };
+  Serial.write(header, sizeof(header));
+  Serial.write(out_buf, len);
+  Serial.write(trailer, sizeof(trailer));
+}
+
+// Acceptance ACK for a JointFrame command. Sent only by the addressed board,
+// only after id has been validated. Does NOT signal completion — completion
+// is still polled via StatusFrame.done_req.
+static void sendAck(AckStatus status){
+  DeltaMessage response = DeltaMessage_init_zero;
+  response.id = MY_ID;
+  response.which_payload = DeltaMessage_ack_tag;
+  response.payload.ack.status = status;
+  sendFramedResponse(response);
 }
 
 static bool handleStatus(const StatusFrame &status){
@@ -195,17 +280,24 @@ static bool handleJoint(const JointFrame &joint){
   switch (joint.which_kind){
     case JointFrame_move_tag: {
       const MoveCommand &cmd = joint.kind.move;
-      if (cmd.joint_pos_count != NUM_MOTORS) return false;
+      if (cmd.joint_pos_count != NUM_MOTORS) {
+        sendAck(AckStatus_ACK_VALIDATION_FAIL);
+        return false;
+      }
       for (int i = 0; i < NUM_MOTORS; i++){
         new_joint_positions[i] = cmd.joint_pos[i];
       }
       go = false;
+      sendAck(AckStatus_ACK_OK);
       return true;
     }
     case JointFrame_traj_tag: {
       const TrajectoryCommand &cmd = joint.kind.traj;
       int n = cmd.joint_pos_count;
-      if (n <= 0 || n > MAX_TRAJ_FLOATS || (n % NUM_MOTORS) != 0) return false;
+      if (n <= 0 || n > MAX_TRAJ_FLOATS || (n % NUM_MOTORS) != 0) {
+        sendAck(AckStatus_ACK_VALIDATION_FAIL);
+        return false;
+      }
       traj_rows = n / NUM_MOTORS;
       for (int i = 0; i < traj_rows; i++){
         for (int j = 0; j < NUM_MOTORS; j++){
@@ -214,6 +306,7 @@ static bool handleJoint(const JointFrame &joint){
       }
       traj_iter = 0;
       go = true;
+      sendAck(AckStatus_ACK_OK);
       return true;
     }
     case JointFrame_reset_tag: {
@@ -221,9 +314,11 @@ static bool handleJoint(const JointFrame &joint){
         new_joint_positions[i] = RESET_POSITION;
       }
       go = false;
+      sendAck(AckStatus_ACK_OK);
       return true;
     }
     default:
+      sendAck(AckStatus_ACK_UNKNOWN_COMMAND);
       return false;
   }
 }

@@ -31,3 +31,8 @@ FRAME_START = b"\xa6"
 FRAME_END = b"\xa7"
 
 DEFAULT_BAUD = 57600
+
+# Acknowledgement read timeout for command sends.
+# Bound by firmware MOVE_TIMEOUT_MS (5000) since the firmware can't service
+# new frames mid-move; small headroom for round-trip latency.
+ACK_TIMEOUT_S = 6.0

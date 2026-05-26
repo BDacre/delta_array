@@ -9,6 +9,17 @@ from .constants import (
 )
 
 
+class CommandError(RuntimeError):
+    """Raised when a command frame is rejected by the firmware or no ACK arrives.
+
+    The firmware sends a CommandAck for every JointFrame command. If the ACK
+    reports anything other than ACK_OK, or if no ACK arrives within the
+    transport's read timeout, the host raises this exception rather than
+    silently continuing — silent command loss was the failure mode this
+    protocol change was designed to eliminate.
+    """
+
+
 class DeltaArrayAgent:
     def __init__(self, transport, robot_id):
         self.transport = transport
@@ -19,10 +30,8 @@ class DeltaArrayAgent:
     def _envelope(self):
         return delta_array_pb2.DeltaMessage(id=self.robot_id)
 
-    def _send(self, msg, expect_reply=False):
+    def _send(self, msg):
         self.transport.send(msg.SerializeToString())
-        if not expect_reply:
-            return None
         payload = self.transport.read_frame()
         if payload is None:
             return None
@@ -34,6 +43,25 @@ class DeltaArrayAgent:
         if reply.id != self.robot_id:
             return None
         return reply
+
+    def _send_command(self, msg):
+        # JointFrame commands always get an acceptance ACK. Raise if missing
+        # or non-OK so callers don't proceed with the next motion assuming
+        # this one was queued when it wasn't.
+        reply = self._send(msg)
+        if reply is None:
+            raise CommandError(
+                f"no ACK from board {self.robot_id} (timeout / framing / CRC fail)"
+            )
+        if not reply.HasField("ack"):
+            raise CommandError(
+                f"board {self.robot_id} returned {reply.WhichOneof('payload')!r}, "
+                f"expected ack"
+            )
+        status = reply.ack.status
+        if status != delta_array_pb2.ACK_OK:
+            name = delta_array_pb2.AckStatus.Name(status)
+            raise CommandError(f"board {self.robot_id} rejected command: {name}")
 
     def move_joint_position(self, desired_joint_positions):
         pos = np.atleast_2d(np.asarray(desired_joint_positions, dtype=float))
@@ -50,12 +78,12 @@ class DeltaArrayAgent:
             msg.joint.move.joint_pos.extend(flat)
         else:
             msg.joint.traj.joint_pos.extend(flat)
-        self._send(msg)
+        self._send_command(msg)
 
     def get_joint_positions(self):
         msg = self._envelope()
         msg.status.pose_req.SetInParent()
-        reply = self._send(msg, expect_reply=True)
+        reply = self._send(msg)
         if (
             reply is not None
             and reply.HasField("status")
@@ -67,7 +95,7 @@ class DeltaArrayAgent:
     def reset(self):
         msg = self._envelope()
         msg.joint.reset.SetInParent()
-        self._send(msg)
+        self._send_command(msg)
 
     def stop(self):
         self.reset()

@@ -53,6 +53,11 @@
 // plus header and bool fields. ~1200 B leaves headroom for the encoded message.
 #define NUM_CHARS 2048 //Max is (DeltaMessage_size + 16), 1217 for 12*20 but leave headroom for safety
 
+// Outbound responses (pose_resp, done_resp) are small — 12 floats + framing
+// fits well under 256 B. Keep this separate from NUM_CHARS so we don't burn
+// 2 KB of stack on every response.
+#define RESPONSE_BUF_BYTES 256
+
 // ---------------------------------------------------------
 // Motor hardware
 // ---------------------------------------------------------
@@ -92,10 +97,9 @@ extern int channels[NUM_MOTORS];
 extern uint8_t input_cmd[NUM_CHARS];
 extern bool newData;
 
-extern boolean recvInProgress;
 extern uint16_t ndx;
-extern char startMarker;
-extern char endMarker;
+extern uint8_t startMarker;
+extern uint8_t endMarker;
 
 // ---------------------------------------------------------
 // Trajectory state
