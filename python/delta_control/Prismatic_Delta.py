@@ -1,141 +1,129 @@
 #!/usr/bin/env python
 
-import time
-import serial
 import math
 import numpy as np
-import ipdb
 
 PI = math.pi
 
 class Prismatic_Delta:
+    # Azimuths of the three equilateral-triangle vertices: vertex 1 on +y, then
+    # -120 deg and +120 deg from it. Shared by the base, the platform and IK/FK
+    # so every part of the mechanism uses a consistent vertex ordering.
+    VERTEX_ANGLES = (math.pi / 2, -math.pi / 6, 7 * math.pi / 6)
+
     def __init__(self, platform_side_length, base_side_length, lower_leg_length):
-        # Naming key (legacy short form -> descriptive):
-        #   s_p, s_b -> platform_side_length, base_side_length
-        #   u_p, u_b -> platform_circumradius, base_circumradius (center -> vertex)
-        #   w_p      -> platform_inradius (center -> side midpoint)
-        #   l        -> lower_leg_length (legs attached to platform)
 
         self.platform_side_length = platform_side_length
         self.base_side_length = base_side_length
-
         self.lower_leg_length = lower_leg_length
 
-        # geometry of equilateral triangle
+        # geometry of the equilateral triangles (center -> vertex / side midpoint)
         self.platform_circumradius = math.sqrt(3) * platform_side_length / 3
         self.base_circumradius = math.sqrt(3) * base_side_length / 3
-
         self.platform_inradius = math.sqrt(3) * platform_side_length / 6
-        self.base_circumradius = math.sqrt(3) * base_side_length / 3
 
-        base_circumradius = math.sqrt(3) * base_side_length / 3
-        self.base_vertex_1 = np.array([[0, base_circumradius, 0]])
-        angle_vertex_2 = -math.pi / 6
-        self.base_vertex_2 = np.array([[base_circumradius * math.cos(angle_vertex_2), base_circumradius * math.sin(angle_vertex_2), 0]])
-        angle_vertex_3 = 7 * math.pi / 6
-        self.base_vertex_3 = np.array([[base_circumradius * math.cos(angle_vertex_3), base_circumradius * math.sin(angle_vertex_3), 0]])
+        # Base vertices are the (fixed) prismatic actuator axes, one per vertex.
+        self.base_vertex_1, self.base_vertex_2, self.base_vertex_3 = self._triangle_vertices(self.base_circumradius)
 
-    def get_base_verteces(self, offset, rotation):
-        transformed_base_vertex_1 = np.transpose((rotation * np.transpose(self.base_vertex_1))) + offset
-        transformed_base_vertex_2 = np.transpose((rotation * np.transpose(self.base_vertex_1))) + offset
-        transformed_base_vertex_3 = np.transpose((rotation * np.transpose(self.base_vertex_1))) + offset
-        return [transformed_base_vertex_1, transformed_base_vertex_2, transformed_base_vertex_3]
+    @classmethod
+    def _triangle_vertices(cls, circumradius):
+        """The three equilateral-triangle vertices (relative to its center) as (1, 3) row vectors."""
+        return [
+            np.array([[circumradius * math.cos(angle), circumradius * math.sin(angle), 0.0]])
+            for angle in cls.VERTEX_ANGLES
+        ]
 
-    def get_knee_joints(self, heights, offset, rotation):
-        [transformed_base_vertex_1, transformed_base_vertex_2, transformed_base_vertex_3] = self.get_base_verteces(offset, rotation)
-        knee_joint_1 = transformed_base_vertex_1 + np.array([[0, 0, heights[0]]])
-        knee_joint_2 = transformed_base_vertex_2 + np.array([[0, 0, heights[1]]])
-        knee_joint_3 = transformed_base_vertex_3 + np.array([[0, 0, heights[2]]])
-        return [knee_joint_1, knee_joint_2, knee_joint_3]
+    def get_base_vertices(self, offset, rotation):
+        """Base vertices (actuator axes) each rotated then translated by offset."""
+        base_vertices = (self.base_vertex_1, self.base_vertex_2, self.base_vertex_3)
+        return [np.transpose(rotation @ np.transpose(vertex)) + offset for vertex in base_vertices]
 
-    def get_platform_verteces(self, platform_center, offset, rotation):
-        platform_circumradius = self.platform_circumradius
-        local_corner_1 = platform_center + np.array([[0, platform_circumradius, 0]])
-        angle_corner_2 = -math.pi / 6
-        local_corner_2 = platform_center + np.array([[platform_circumradius * math.cos(angle_corner_2), platform_circumradius * math.sin(angle_corner_2), 0]])
-        angle_corner_3 = 7 * math.pi / 6
-        local_corner_3 = platform_center + np.array([[platform_circumradius * math.cos(angle_corner_3), platform_circumradius * math.sin(angle_corner_3), 0]])
+    def get_carriage_joints(self, heights, offset, rotation):
+        [transformed_base_vertex_1, transformed_base_vertex_2, transformed_base_vertex_3] = self.get_base_vertices(offset, rotation)
+        carriage_joint_1 = transformed_base_vertex_1 + np.array([[0, 0, heights[0]]])
+        carriage_joint_2 = transformed_base_vertex_2 + np.array([[0, 0, heights[1]]])
+        carriage_joint_3 = transformed_base_vertex_3 + np.array([[0, 0, heights[2]]])
+        return [carriage_joint_1, carriage_joint_2, carriage_joint_3]
 
-        platform_vertex_1 = np.tranpose(rotation * np.transpose(local_corner_1)) + offset
-        platform_vertex_2 = np.tranpose(rotation * np.transpose(local_corner_1)) + offset
-        platform_vertex_3 = np.tranpose(rotation * np.transpose(local_corner_1)) + offset
+    def get_platform_vertices(self, platform_center, offset, rotation):
+        """Platform vertex positions for a given center, each rotated then translated by offset."""
+        local_vertices = [platform_center + vertex_offset
+                          for vertex_offset in self._triangle_vertices(self.platform_circumradius)]
+        return [np.transpose(rotation @ np.transpose(vertex)) + offset for vertex in local_vertices]
 
-        return [platform_vertex_1, platform_vertex_2, platform_vertex_3]
+    def validate_pts(self, pts, carriage_joint_lim, par_joint_lim):
+        """Filter trajectory points to those that satisfy the joint limits.
 
-    def validate_pts(self, pts, knee_joint_lim, par_joint_lim):
-        # validate that joint limits are satisfied for each point in
-        # trajectory and return corrected heights that are valid
+        Returns [valid_heights, valid_pts]: for every reachable point in pts
+        (via IK, i.e. with every carriage joint below the platform) whose
+        parallel and carriage joint angles stay within the given limits.
+        """
+        pts = np.asarray(pts, dtype=float)
+        bases = np.concatenate((self.base_vertex_1, self.base_vertex_2, self.base_vertex_3))
+        normalized_bases = bases / np.linalg.norm(bases, axis=1, keepdims=True)
 
-        # A corrected point is one that is acheived with every knee
-        # joint below the base platform, which is not a constraint for
-        # FK and workspace sampling.  This is simply done by calling IK
+        valid_pts = []
+        valid_heights = []
+        for pt in pts:
+            # rotz(0) == identity, so no rotation is applied to the platform.
+            platform_vertices = np.concatenate(
+                self.get_platform_vertices(pt, np.zeros((1, 3)), np.identity(3))
+            )
 
-        valid_pts = np.zeros((len(pts), 3))
-        valid_heights = np.zeros((len(pts), 3))
-        valid_count = 0
-        base_vertex_1 = self.base_vertex_1
-        base_vertex_2 = self.base_vertex_2
-        base_vertex_3 = self.base_vertex_3
-        bases = np.concatenate((base_vertex_1, base_vertex_2, base_vertex_3))
-
-        for row in range(len(pts)):
-            pt = pts[row]
-            [platform_vertex_1, platform_vertex_2, platform_vertex_3] = self.get_platform_verteces(pt, np.array([[0, 0, 0]]), np.identity(
-                3))  # was rotz(0), but this is same as identity
-            platform_vertices = np.concatenate((platform_vertex_1, platform_vertex_2, platform_vertex_3))
-
+            # Project the platform vertices onto the floor (z = 0) and measure
+            # the parallel (base universal joint) angle off each actuator axis.
             floor_pt = np.concatenate((platform_vertices[:, 0:2], np.zeros((3, 1))), axis=1)
-            normalized_bases = bases / np.linalg.norm(bases, axis=1,
-                                                 keepdims=True)  # https://stackoverflow.com/questions/37914795/normalising-rows-in-numpy-matrix
-            normalized_floor_pt = (floor_pt - bases) / np.linalg.norm((floor_pt - bases), axis=1, keepdims=True)
-            parallel_joint_angles = math.asin(
-                math.sqrt(sum(np.power(np.cross(normalized_bases, normalized_floor_pt), 2))))  # sum of each row
-            if sum(parallel_joint_angles > par_joint_lim) == 0:
-                heights = self.IK(pt)
-                if sum(sum(heights < 0)) > 0:
-                    continue
-                knee_joint_angles = math.pi / 2 - math.asin(
-                    (np.ones((3, 1)) * pt[2] - np.transpose(heights)) / self.lower_leg_length)  # FIXME
-                if sum(knee_joint_angles > knee_joint_lim) == 0:
-                    valid_heights[valid_count] = heights
-                    valid_pts[valid_count] = pt
-                    valid_count = valid_count + 1
+            leg_dirs = floor_pt - bases
+            normalized_leg_dirs = leg_dirs / np.linalg.norm(leg_dirs, axis=1, keepdims=True)
+            sin_parallel = np.linalg.norm(np.cross(normalized_bases, normalized_leg_dirs), axis=1)
+            parallel_joint_angles = np.arcsin(np.clip(sin_parallel, -1.0, 1.0))
+            if np.any(parallel_joint_angles > par_joint_lim):
+                continue
 
-        valid_pts = valid_pts[0:valid_count + 1]
-        valid_heights = valid_heights[0:valid_count + 1]
+            heights = self.IK(pt)
+            if np.any(np.isnan(heights)) or np.any(heights < 0):
+                continue
 
+            carriage_joint_angles = math.pi / 2 - np.arcsin(
+                np.clip((pt[2] - heights) / self.lower_leg_length, -1.0, 1.0))
+            if np.any(carriage_joint_angles > carriage_joint_lim):
+                continue
+
+            valid_heights.append(heights)
+            valid_pts.append(pt)
+
+        valid_heights = np.array(valid_heights) if valid_heights else np.empty((0, 3))
+        valid_pts = np.array(valid_pts) if valid_pts else np.empty((0, 3))
         return [valid_heights, valid_pts]
 
     def is_valid(self, pt, max_height):
-        min_height = 0
+        """True if pt is reachable with every actuator height in [0, max_height]."""
         heights = self.IK(pt)
-
-        # not imaginary and not above max height
-        is_valid = sum(heights < min_height) + sum(heights > max_height) == 0 and sum(heights == abs(heights)) == 3
-        return is_valid
+        if np.any(np.isnan(heights)):  # unreachable (xy offset exceeds leg length)
+            return False
+        return bool(np.all(heights >= 0) and np.all(heights <= max_height))
 
     def IK(self, position):
-        # find corners of ee platform
-        platform_circumradius = self.platform_circumradius
-        platform_corner_1 = position + np.array([[0, platform_circumradius, 0]])
-        angle_corner_2 = -math.pi / 6
-        platform_corner_2 = position + np.array([[platform_circumradius * math.cos(angle_corner_2), platform_circumradius * math.sin(angle_corner_2), 0]])
-        angle_corner_3 = 7 * math.pi / 6
-        platform_corner_3 = position + np.array([[platform_circumradius * math.cos(angle_corner_3), platform_circumradius * math.sin(angle_corner_3), 0]])
+        """End-effector position (x, y, z) -> the three prismatic actuator heights.
 
-        # squared dist to prismatic actuator axis
-        squared_xy_distance_1 = np.sum(np.power(platform_corner_1[0][0:2] - self.base_vertex_1[0][0:2], 2))
-        squared_xy_distance_2 = np.sum(np.power(platform_corner_2[0][0:2] - self.base_vertex_2[0][0:2], 2))
-        squared_xy_distance_3 = np.sum(np.power(platform_corner_3[0][0:2] - self.base_vertex_3[0][0:2], 2))
-
+        Returns a (3,) array of heights. Returns an array of NaNs if the position
+        is outside the reachable workspace (the required xy offset exceeds the leg
+        length for some actuator). NaN is used rather than a magic sentinel so an
+        unreachable request can never be mistaken for a valid command downstream.
+        """
+        position = np.asarray(position, dtype=float).reshape(3)
+        base_vertices = (self.base_vertex_1, self.base_vertex_2, self.base_vertex_3)
+        platform_vertex_offsets = self._triangle_vertices(self.platform_circumradius)
         squared_leg_length = self.lower_leg_length ** 2
-        if squared_xy_distance_1 > squared_leg_length or squared_xy_distance_2 > squared_leg_length or squared_xy_distance_3 > squared_leg_length:
-            return [-42., -42., -42.]
-        height_1 = position[2] - math.sqrt(squared_leg_length - squared_xy_distance_1)
-        height_2 = position[2] - math.sqrt(squared_leg_length - squared_xy_distance_2)
-        height_3 = position[2] - math.sqrt(squared_leg_length - squared_xy_distance_3)
 
-        heights = [height_1, height_2, height_3]
+        heights = np.empty(3)
+        for i, (vertex_offset, base_vertex) in enumerate(zip(platform_vertex_offsets, base_vertices)):
+            platform_vertex = position + vertex_offset[0]
+            # squared distance from the platform vertex to the (vertical) actuator axis
+            squared_xy_distance = np.sum((platform_vertex[0:2] - base_vertex[0][0:2]) ** 2)
+            if squared_xy_distance > squared_leg_length:
+                return np.full(3, np.nan)
+            heights[i] = position[2] - math.sqrt(squared_leg_length - squared_xy_distance)
         return heights
 
     def IK_Traj(self, trajectory):
@@ -196,13 +184,12 @@ class Prismatic_Delta:
         sphere_center_2 = self.base_vertex_2 + np.array([0,0,heights[1]])
         sphere_center_3 = self.base_vertex_3 + np.array([0,0,heights[2]])
 
-        # shift sphere centers by platform offset
-        platform_circumradius = self.platform_circumradius
-        shifted_sphere_center_1 = sphere_center_1 - np.array([0, platform_circumradius, 0])
-        angle_corner_2 = -PI/6
-        shifted_sphere_center_2 = sphere_center_2 - np.array([platform_circumradius * math.cos(angle_corner_2), platform_circumradius * math.sin(angle_corner_2), 0])
-        angle_corner_3 = 7*PI/6
-        shifted_sphere_center_3 = sphere_center_3 - np.array([platform_circumradius * math.cos(angle_corner_3), platform_circumradius * math.sin(angle_corner_3), 0])
+        # Subtract each platform vertex offset so the three-sphere intersection
+        # solves for the platform CENTER rather than a vertex.
+        platform_vertex_1, platform_vertex_2, platform_vertex_3 = self._triangle_vertices(self.platform_circumradius)
+        shifted_sphere_center_1 = sphere_center_1 - platform_vertex_1
+        shifted_sphere_center_2 = sphere_center_2 - platform_vertex_2
+        shifted_sphere_center_3 = sphere_center_3 - platform_vertex_3
 
         leg_length = self.lower_leg_length
         position = self.interx(shifted_sphere_center_1, shifted_sphere_center_2, shifted_sphere_center_3, leg_length, leg_length, leg_length, 1)
@@ -219,70 +206,69 @@ class Prismatic_Delta:
         return traj
 
     def find_workspace_shape(self, max_height):
+        """Approximate the reachable workspace as [low_z, high_z, max_rad_z, max_rad].
+
+        Scans the central axis for the reachable z-range, then for each reachable
+        z grows the radius outward to find the largest reachable radius and the z
+        at which it occurs.
+        """
         step = .1
         z_samples = np.arange(0, max_height, step) + self.lower_leg_length
-        max_rad = 0.0
-        max_rad_z = 0.0
         low_z = max_height + self.lower_leg_length
         high_z = 0.0
+        max_rad = 0.0
+        max_rad_z = 0.0
         for z in z_samples:
-            if self.is_valid(np.array([0,0,z]),max_height):
-                if low_z > z:
-                    low_z = z
-                if high_z < z:
-                    high_z = z
+            if not self.is_valid(np.array([0.0, 0.0, z]), max_height):
+                continue
+            low_z = min(low_z, z)
+            high_z = max(high_z, z)
 
-        x = 0.0
-        y = max_rad
-        pt = np.array([x,y,z])
-        if self.is_valid(pt,max_height):
-            while True:
-                y = y + step
-                pt = np.array([x,y,z])
-                if self.is_valid(pt,max_height):
-                    max_rad_z = z
-                    max_rad = y
-                else:
-                    break
+            radius = 0.0
+            while self.is_valid(np.array([0.0, radius + step, z]), max_height):
+                radius += step
+            if radius > max_rad:
+                max_rad = radius
+                max_rad_z = z
 
-        return np.array([low_z,high_z,max_rad_z,max_rad])
+        return np.array([low_z, high_z, max_rad_z, max_rad])
 
     def find_workspace_slice(self, z, step, max_height):
+        """Return the reachable workspace points at a fixed z.
 
-        # returns workspace slice for a fixed z
-        directions = np.arange(0, 2*PI, step)
-        border_pts = np.zeros(math.ceil((self.lower_leg_length * 2.0 / step) ** 2, 3))
-        index = 0
+        Walks outward from the center along evenly spaced directions, collecting
+        every reachable point until the direction leaves the workspace. step is
+        both the angular spacing (rad) between directions and the outward spatial
+        increment along each.
+        """
+        directions = np.arange(0, 2 * PI, step)
+        slice_pts = []
         for direction_angle in directions:
-            pt = np.array([0, 0, z])
-        while True:
-            if self.is_valid(pt, max_height):
-                index = index + 1
-                slice_pts[index,:] = pt
-            else:
-                break
-            pt = pt + step * [math.cos(direction_angle), math.sin(direction_angle), 0]
-
-        slice_pts = slice_pts[0:index,:]
-
-        return slice_pts
+            direction = np.array([math.cos(direction_angle), math.sin(direction_angle), 0.0])
+            pt = np.array([0.0, 0.0, z])
+            while self.is_valid(pt, max_height):
+                slice_pts.append(pt.copy())
+                pt = pt + step * direction
+        return np.array(slice_pts) if slice_pts else np.empty((0, 3))
 
     def find_workspace_edge(self, z, step, max_height):
-        # returns points on the border of the workspace for a fixed value of z
-        # step is the rotation in radians to the next point
-        directions = np.arange(0, 2*PI,step)
-        border_pts = zeros(size(directions, 2), 3)
-        index = 0
+        """Return points on the workspace border at a fixed z.
+
+        For each direction, walks outward until the next step leaves the
+        workspace and records the last reachable point. step is both the angular
+        spacing (rad) between directions and the outward spatial increment.
+        """
+        directions = np.arange(0, 2 * PI, step)
+        border_pts = []
         for direction_angle in directions:
-            pt = np.array([0, 0, z])
-        while True:
-            next_pt = pt + step * np.array([math.cos(direction_angle), math.sin(direction_angle), 0])
-            if not self.is_valid(next_pt, max_height):
-                index = index + 1
-                border_pts[index,:] = pt
-                break
-            pt = next_pt
-        return border_pts
+            direction = np.array([math.cos(direction_angle), math.sin(direction_angle), 0.0])
+            pt = np.array([0.0, 0.0, z])
+            if not self.is_valid(pt, max_height):
+                continue
+            while self.is_valid(pt + step * direction, max_height):
+                pt = pt + step * direction
+            border_pts.append(pt.copy())
+        return np.array(border_pts) if border_pts else np.empty((0, 3))
 
     def interx(self, sphere_center_1=None, sphere_center_2=None, sphere_center_3=None, radius_1=None, radius_2=None, radius_3=None, use_positive_root=None):
         # Trilateration: intersect three spheres and return one of the two solutions.
