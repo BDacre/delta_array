@@ -3,9 +3,11 @@
 import math
 import numpy as np
 
+from .constants import MAX_JOINT_POS, MIN_JOINT_POS, SIDE_LENGTH_BASE, SIDE_LENGTH_PLATFORM, LEG_LENGTH
+
 PI = math.pi
 
-class Prismatic_Delta:
+class PrismaticDelta:
     # Azimuths of the three equilateral-triangle vertices: vertex 1 on +y, then
     # -120 deg and +120 deg from it. Shared by the base, the platform and IK/FK
     # so every part of the mechanism uses a consistent vertex ordering.
@@ -16,6 +18,12 @@ class Prismatic_Delta:
         self.platform_side_length = platform_side_length
         self.base_side_length = base_side_length
         self.lower_leg_length = lower_leg_length
+
+        self.min_joint_pos = MIN_JOINT_POS
+        self.max_joint_pos = MAX_JOINT_POS
+        self.side_length_platform = platform_side_length
+        self.side_length_base = base_side_length
+        self.leg_length = lower_leg_length
 
         # geometry of the equilateral triangles (center -> vertex / side midpoint)
         self.platform_circumradius = math.sqrt(3) * platform_side_length / 3
@@ -80,7 +88,7 @@ class Prismatic_Delta:
             if np.any(parallel_joint_angles > par_joint_lim):
                 continue
 
-            heights = self.IK(pt)
+            heights = self.ik(pt)
             if np.any(np.isnan(heights)) or np.any(heights < 0):
                 continue
 
@@ -103,7 +111,7 @@ class Prismatic_Delta:
             return False
         return bool(np.all(heights >= 0) and np.all(heights <= max_height))
 
-    def IK(self, position):
+    def ik(self, position):
         """End-effector position (x, y, z) -> the three prismatic actuator heights.
 
         Returns a (3,) array of heights. Returns an array of NaNs if the position
@@ -126,10 +134,10 @@ class Prismatic_Delta:
             heights[i] = position[2] - math.sqrt(squared_leg_length - squared_xy_distance)
         return heights
 
-    def IK_Traj(self, trajectory):
+    def ik_traj(self, trajectory):
         heights_trajectory = np.zeros((len(trajectory), 3))
         for i in range(len(trajectory)):
-            heights_trajectory[i] = self.IK(trajectory[i])
+            heights_trajectory[i] = self.ik(trajectory[i])
 
         return heights_trajectory
 
@@ -140,7 +148,7 @@ class Prismatic_Delta:
         for height_1 in height_sample:
             for height_2 in height_sample:
                 for height_3 in height_sample:
-                    test_pt = self.FK([height_1, height_2, height_3])
+                    test_pt = self.fk([height_1, height_2, height_3])
                     if(np.sum(np.isnan(test_pt)) == 0):
                         index = index + 1
                         pts[index,:] = test_pt
@@ -168,7 +176,7 @@ class Prismatic_Delta:
         for height_1 in height_1_samples:
             for height_2 in height_2_samples:
                 for height_3 in height_3_samples:
-                    test_pt = self.FK(np.array([height_1, height_2, height_3]))
+                    test_pt = self.fk(np.array([height_1, height_2, height_3]))
                     if(np.sum(test_pt) == 0):
                         index = index + 1
                         pts[index,:] = test_pt
@@ -178,7 +186,7 @@ class Prismatic_Delta:
         return pts
 
 
-    def FK(self, heights):
+    def fk(self, heights):
 
         sphere_center_1 = self.base_vertex_1 + np.array([0,0,heights[0]])
         sphere_center_2 = self.base_vertex_2 + np.array([0,0,heights[1]])
@@ -197,11 +205,11 @@ class Prismatic_Delta:
 
         return position
 
-    def FK_Traj(self, heights):
+    def fk_traj(self, heights):
         # FK on trajectory
         traj = np.zeros((heights.shape[0],3))
         for i in np.arange(heights.shape[0]):
-            traj[i,:] = self.FK(heights[i,:])
+            traj[i,:] = self.fk(heights[i,:])
 
         return traj
 

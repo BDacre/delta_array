@@ -26,6 +26,10 @@ class DeltaArrayAgent:
         self.robot_id = robot_id
         self.done_moving = False
         self.current_joint_positions = [0.05] * NUM_MOTORS
+        self.min_joint_pos = MIN_JOINT_POS
+        self.max_joint_pos = MAX_JOINT_POS
+        self.num_motors = NUM_MOTORS
+        self.max_trajectory_rows = MAX_TRAJECTORY_ROWS
 
     def _envelope(self):
         return delta_array_pb2.DeltaMessage(id=self.robot_id)

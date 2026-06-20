@@ -10,12 +10,12 @@ from .constants import (
     SIDE_LENGTH_BASE,
     SIDE_LENGTH_PLATFORM,
 )
-from .Prismatic_Delta import Prismatic_Delta
+from .prismatic_delta import PrismaticDelta
 
 
 class RoboCoords:
     def __init__(self):
-        self.Delta = Prismatic_Delta(SIDE_LENGTH_PLATFORM, SIDE_LENGTH_BASE, LEG_LENGTH)
+        self.delta = PrismaticDelta(SIDE_LENGTH_PLATFORM, SIDE_LENGTH_BASE, LEG_LENGTH)
         self.robot_positions = np.zeros((8, 8, 2))
         self.delta_array = np.zeros((8, 8))
         self.rot_30 = np.pi / 6
@@ -112,15 +112,15 @@ class RoboCoords:
             self.zmax, self.zmin = zmax, zmin
         for i in self.robo_dict.keys():
             idx = self.robo_dict[i]
-            self.even_pattern[idx[0]] = np.array(self.Delta.IK([*vecs[idx[0]], self.zmax]))
-            self.even_pattern[idx[1]] = np.array(self.Delta.IK([*vecs[idx[1]], self.zmax]))
-            self.even_pattern[idx[2]] = np.array(self.Delta.IK([*vecs[idx[2]] * -1, self.zmin]))
-            self.even_pattern[idx[3]] = np.array(self.Delta.IK([*vecs[idx[3]] * -1, self.zmin]))
+            self.even_pattern[idx[0]] = np.array(self.delta.ik([*vecs[idx[0]], self.zmax]))
+            self.even_pattern[idx[1]] = np.array(self.delta.ik([*vecs[idx[1]], self.zmax]))
+            self.even_pattern[idx[2]] = np.array(self.delta.ik([*vecs[idx[2]] * -1, self.zmin]))
+            self.even_pattern[idx[3]] = np.array(self.delta.ik([*vecs[idx[3]] * -1, self.zmin]))
 
-            self.odd_pattern[idx[0]] = np.array(self.Delta.IK([*vecs[idx[0]] * -1, self.zmin]))
-            self.odd_pattern[idx[1]] = np.array(self.Delta.IK([*vecs[idx[1]] * -1, self.zmin]))
-            self.odd_pattern[idx[2]] = np.array(self.Delta.IK([*vecs[idx[2]], self.zmax]))
-            self.odd_pattern[idx[3]] = np.array(self.Delta.IK([*vecs[idx[3]], self.zmax]))
+            self.odd_pattern[idx[0]] = np.array(self.delta.ik([*vecs[idx[0]] * -1, self.zmin]))
+            self.odd_pattern[idx[1]] = np.array(self.delta.ik([*vecs[idx[1]] * -1, self.zmin]))
+            self.odd_pattern[idx[2]] = np.array(self.delta.ik([*vecs[idx[2]], self.zmax]))
+            self.odd_pattern[idx[3]] = np.array(self.delta.ik([*vecs[idx[3]], self.zmax]))
 
     def get_pattern(self, id, a):
         idx = self.robo_dict[id]
@@ -131,33 +131,33 @@ class RoboCoords:
 
     def set_wall(self, wall_array, wall_ht=0.135):
         for (i, j) in wall_array:
-            self.even_pattern[(i, j)] = np.array(self.Delta.IK([0, 0, wall_ht]))
-            self.odd_pattern[(i, j)] = np.array(self.Delta.IK([0, 0, wall_ht]))
+            self.even_pattern[(i, j)] = np.array(self.delta.ik([0, 0, wall_ht]))
+            self.odd_pattern[(i, j)] = np.array(self.delta.ik([0, 0, wall_ht]))
 
     def set_pattern_for_gripper(self, idx, val, partial=0):
         if partial == 0:
-            self.even_pattern[idx[0]] = np.array(self.Delta.IK([*val]))
-            self.even_pattern[idx[1]] = np.array(self.Delta.IK([*val]))
-            self.even_pattern[idx[2]] = np.array(self.Delta.IK([*val]))
-            self.even_pattern[idx[3]] = np.array(self.Delta.IK([*val]))
+            self.even_pattern[idx[0]] = np.array(self.delta.ik([*val]))
+            self.even_pattern[idx[1]] = np.array(self.delta.ik([*val]))
+            self.even_pattern[idx[2]] = np.array(self.delta.ik([*val]))
+            self.even_pattern[idx[3]] = np.array(self.delta.ik([*val]))
 
-            self.odd_pattern[idx[0]] = np.array(self.Delta.IK([*val]))
-            self.odd_pattern[idx[1]] = np.array(self.Delta.IK([*val]))
-            self.odd_pattern[idx[2]] = np.array(self.Delta.IK([*val]))
-            self.odd_pattern[idx[3]] = np.array(self.Delta.IK([*val]))
+            self.odd_pattern[idx[0]] = np.array(self.delta.ik([*val]))
+            self.odd_pattern[idx[1]] = np.array(self.delta.ik([*val]))
+            self.odd_pattern[idx[2]] = np.array(self.delta.ik([*val]))
+            self.odd_pattern[idx[3]] = np.array(self.delta.ik([*val]))
         elif partial == 1:
-            self.even_pattern[idx[1]] = np.array(self.Delta.IK([*val]))
-            self.even_pattern[idx[2]] = np.array(self.Delta.IK([*val]))
+            self.even_pattern[idx[1]] = np.array(self.delta.ik([*val]))
+            self.even_pattern[idx[2]] = np.array(self.delta.ik([*val]))
 
-            self.odd_pattern[idx[1]] = np.array(self.Delta.IK([*val]))
-            self.odd_pattern[idx[2]] = np.array(self.Delta.IK([*val]))
+            self.odd_pattern[idx[1]] = np.array(self.delta.ik([*val]))
+            self.odd_pattern[idx[2]] = np.array(self.delta.ik([*val]))
             self.set_wall([idx[3], idx[0]], wall_ht=0.11)
         elif partial == 2:
-            self.even_pattern[idx[0]] = np.array(self.Delta.IK([*val]))
-            self.even_pattern[idx[3]] = np.array(self.Delta.IK([*val]))
+            self.even_pattern[idx[0]] = np.array(self.delta.ik([*val]))
+            self.even_pattern[idx[3]] = np.array(self.delta.ik([*val]))
 
-            self.odd_pattern[idx[0]] = np.array(self.Delta.IK([*val]))
-            self.odd_pattern[idx[3]] = np.array(self.Delta.IK([*val]))
+            self.odd_pattern[idx[0]] = np.array(self.delta.ik([*val]))
+            self.odd_pattern[idx[3]] = np.array(self.delta.ik([*val]))
             self.set_wall([idx[2], idx[1]], wall_ht=0.11)
         return
 
@@ -188,18 +188,18 @@ class RoboCoords:
         val2_0 = [-xval, yval, self.zmax]
         val2_1 = [xval * 3, -yval, self.zmax]
         for idx in grip_idxs_l:
-            self.even_pattern[idx[0]] = np.array(self.Delta.IK([*val1_0]))
-            self.even_pattern[idx[3]] = np.array(self.Delta.IK([*val1_1]))
+            self.even_pattern[idx[0]] = np.array(self.delta.ik([*val1_0]))
+            self.even_pattern[idx[3]] = np.array(self.delta.ik([*val1_1]))
 
-            self.odd_pattern[idx[0]] = np.array(self.Delta.IK([*val1_1]))
-            self.odd_pattern[idx[3]] = np.array(self.Delta.IK([*val1_0]))
+            self.odd_pattern[idx[0]] = np.array(self.delta.ik([*val1_1]))
+            self.odd_pattern[idx[3]] = np.array(self.delta.ik([*val1_0]))
 
         for idx in grip_idxs_r:
-            self.even_pattern[idx[1]] = np.array(self.Delta.IK([*val2_0]))
-            self.even_pattern[idx[2]] = np.array(self.Delta.IK([*val2_1]))
+            self.even_pattern[idx[1]] = np.array(self.delta.ik([*val2_0]))
+            self.even_pattern[idx[2]] = np.array(self.delta.ik([*val2_1]))
 
-            self.odd_pattern[idx[1]] = np.array(self.Delta.IK([*val2_1]))
-            self.odd_pattern[idx[2]] = np.array(self.Delta.IK([*val2_0]))
+            self.odd_pattern[idx[1]] = np.array(self.delta.ik([*val2_1]))
+            self.odd_pattern[idx[2]] = np.array(self.delta.ik([*val2_0]))
 
 
 if __name__ == "__main__":
