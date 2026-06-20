@@ -79,6 +79,15 @@ class DeltaArrayAgent:
         else:
             msg.joint.traj.joint_pos.extend(flat)
         self._send_command(msg)
+        self.current_joint_positions = pos[-1].tolist()
+
+    def move_delta(self, delta_index, motor_positions):
+        assert 0 <= delta_index <= 3, f"delta_index must be 0-3, got {delta_index}"
+        assert len(motor_positions) == 3, f"expected 3 motor positions, got {len(motor_positions)}"
+        pos = list(self.current_joint_positions)
+        start = delta_index * 3
+        pos[start:start + 3] = motor_positions
+        self.move_joint_position(pos)
 
     def get_joint_positions(self):
         msg = self._envelope()
