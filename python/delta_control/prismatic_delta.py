@@ -3,8 +3,6 @@
 import math
 import numpy as np
 
-from .constants import MAX_JOINT_POS, MIN_JOINT_POS, SIDE_LENGTH_BASE, SIDE_LENGTH_PLATFORM, LEG_LENGTH
-
 PI = math.pi
 
 class PrismaticDelta:
@@ -19,8 +17,6 @@ class PrismaticDelta:
         self.base_side_length = base_side_length
         self.lower_leg_length = lower_leg_length
 
-        self.min_joint_pos = MIN_JOINT_POS
-        self.max_joint_pos = MAX_JOINT_POS
         self.side_length_platform = platform_side_length
         self.side_length_base = base_side_length
         self.leg_length = lower_leg_length

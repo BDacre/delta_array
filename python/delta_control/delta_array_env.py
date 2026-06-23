@@ -45,6 +45,13 @@ class DeltaArrayEnv:
         for i in self.active_ids:
             self.agents[i].move_joint_position(jts)
 
+    def close(self):
+        # Release the serial port; safe to call even if the transport is
+        # already closed or was never fully opened.
+        transport = getattr(self, "transport", None)
+        if transport is not None:
+            transport.close()
+
     # def move_over_trajectory(self, traj="vertical"):
     #     if traj == "circle":
     #         thetas = np.linspace(0, 2 * np.pi, 10)
