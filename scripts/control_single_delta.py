@@ -10,13 +10,13 @@ import time
 from delta_control import DeltaArrayEnv
 from delta_control.constants import NUM_MOTORS
 
-SETTLE_TIME = 30.0
+SETTLE_TIME = 5.0
 
 DEFAULT_PORT = "/dev/ttyACM0"
 DEFAULT_ROBOT_ID = 9
 
-DELTA_INDEX = 1
-TARGET_POS = [0.09, 0.05, 0.05]
+DELTA_INDEX = 2
+TARGET_POS = [0.05, 0.06, 0.05]
 
 
 def run(port: str, robot_id: int) -> None:

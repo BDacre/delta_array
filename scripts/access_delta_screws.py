@@ -10,9 +10,8 @@ import time
 from delta_control import DeltaArrayEnv
 from delta_control.constants import NUM_MOTORS
 
-SETTLE_TIME = 60
-TARGET_POS = 0.005
-JOINT_POSITIONS = [0.08, 0.07, 0.07, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
+DELTA_ORDER = [0,1,2,3]
+TARGET_POS = [0.09, 0.09, 0.09]
 DEFAULT_PORT = "/dev/ttyACM0"
 DEFAULT_ROBOT_ID = 9
 
@@ -27,14 +26,20 @@ def run(port: str, robot_id: int) -> None:
         env.reset()
         time.sleep(1)
 
-        print(f"moving all motors to {TARGET_POS}")
-        agent.move_joint_position(JOINT_POSITIONS)
-        #agent.move_joint_position([TARGET_POS] * NUM_MOTORS)
-        time.sleep(SETTLE_TIME)
-
-        print("returning to home")
-        env.reset()
+        print("Moving low")
+        low_pos = [0.01] * NUM_MOTORS
+        agent.move_joint_position(low_pos)
         time.sleep(1)
+
+        for delta_index in DELTA_ORDER:
+            print(f"moving delta {delta_index} to {TARGET_POS}")
+
+            agent.move_delta(delta_index, TARGET_POS)
+            #agent.move_joint_position([TARGET_POS] * NUM_MOTORS)
+            input(f"delta {delta_index} in position. Press Enter to continue to the next delta...")
+
+            agent.move_joint_position(low_pos)
+            time.sleep(1)
     finally:
         print("closing port")
         agent.close()
