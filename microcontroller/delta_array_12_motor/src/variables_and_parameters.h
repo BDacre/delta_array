@@ -9,7 +9,25 @@
 // Configuration
 // ---------------------------------------------------------
 #define NUM_MOTORS 12
-#define MY_ID 9
+
+// Board id is no longer hard-coded. Each board derives a unique id at boot from
+// the SAMD21 factory serial number (see my_id / computeChipId in main.cpp), so
+// the same firmware image runs on every board. my_id is set in setup().
+extern uint32_t my_id;
+
+// Backdoor / broadcast id. A board also accepts frames addressed to this id, so
+// it can be controlled before its real id is known (e.g. discovery, bench
+// maintenance). Replies are always stamped with the board's real my_id, never
+// the broadcast id, so any reply reveals the true id. Guaranteed distinct from
+// any derived id because computeChipId() never returns 0.
+#define BROADCAST_ID 0
+
+// SAMD21 (Cortex-M0+) 128-bit unique serial number word addresses. The four
+// words are non-contiguous in the datasheet's memory map.
+#define SAMD_SERIAL_WORD0 0x0080A00C
+#define SAMD_SERIAL_WORD1 0x0080A040
+#define SAMD_SERIAL_WORD2 0x0080A044
+#define SAMD_SERIAL_WORD3 0x0080A048
 
 #define SERIAL_BAUD 57600
 #define INIT_MOTOR_SPEED 150

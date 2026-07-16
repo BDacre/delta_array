@@ -93,6 +93,22 @@ class DeltaArrayAgent:
         pos[start:start + 3] = motor_positions
         self.move_joint_position(pos)
 
+    def whoami(self):
+        # Ask this (already-addressed) board to report its chip-derived id, e.g.
+        # to confirm/log which board answers on this port. For discovery when the
+        # id is unknown, use delta_array_env.discover_board_id (broadcast) instead
+        # — _send here filters replies to self.robot_id.
+        msg = self._envelope()
+        msg.status.id_req.SetInParent()
+        reply = self._send(msg)
+        if (
+            reply is not None
+            and reply.HasField("status")
+            and reply.status.HasField("id_resp")
+        ):
+            return reply.status.id_resp.id
+        return None
+
     def get_joint_positions(self):
         msg = self._envelope()
         msg.status.pose_req.SetInParent()

@@ -2,12 +2,12 @@
 import math
 import time
 
-from delta_control import DeltaArrayEnv
+from delta_control import open_board
 
 SETTLE_TIME = 1.0
 
-DEFAULT_PORT = "/dev/ttyACM0"
-DEFAULT_ROBOT_ID = 9
+DEFAULT_PORT = None  # None auto-detects the board's port by scanning /dev/ttyACM*
+DEFAULT_BOARD = None  # None auto-discovers; set a BOARD_REGISTRY label or raw id to skip
 
 DELTA_INDEX = 0
 MAX_ACTUATOR_DIFF = 0.005
@@ -20,10 +20,9 @@ def _inclusive_range(start: float, stop: float, step: float) -> list[float]:
     return [round(start + i * step, 8) for i in range(n) if start + i * step <= stop + 1e-9]
 
 
-def run(port: str, robot_id: int) -> None:
-    print(f"opening {port} for robot id {robot_id}")
-    env = DeltaArrayEnv(port, active_ids=(robot_id,))
-    agent = env.agents[robot_id]
+def run(port: str, board=None) -> None:
+    env, agent = open_board(port, board)
+    print(f"opening {port}, using board id {env.active_ids[0]}")
 
     try:
         print("homing...")
@@ -88,4 +87,4 @@ def run(port: str, robot_id: int) -> None:
 
 
 if __name__ == "__main__":
-    run(DEFAULT_PORT, DEFAULT_ROBOT_ID)
+    run(DEFAULT_PORT, DEFAULT_BOARD)

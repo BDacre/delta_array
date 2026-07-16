@@ -52,6 +52,9 @@ uint16_t ndx = 0;
 uint8_t startMarker = 0xA6;
 uint8_t endMarker = 0xA7;
 
+// Chip-derived board id. Zero until setup() computes it from the SAMD21 serial.
+uint32_t my_id = 0;
+
 // ---------------------------------------------------------
 // Control mode
 // ---------------------------------------------------------

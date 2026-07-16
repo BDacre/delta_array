@@ -38,6 +38,17 @@ typedef struct _DoneResponse {
     bool done;
 } DoneResponse;
 
+/* Whoami: the host asks a board for its chip-derived id (id_req) and the board
+ answers with it (id_resp). Used for discovery — the host addresses id_req to
+ the broadcast id (0) when it does not yet know the board's real id. */
+typedef struct _IdRequest {
+    char dummy_field;
+} IdRequest;
+
+typedef struct _IdResponse {
+    uint32_t id;
+} IdResponse;
+
 typedef struct _StatusFrame {
     pb_size_t which_kind;
     union {
@@ -45,6 +56,8 @@ typedef struct _StatusFrame {
         DoneRequest done_req;
         PoseResponse pose_resp;
         DoneResponse done_resp;
+        IdRequest id_req;
+        IdResponse id_resp;
     } kind;
 } StatusFrame;
 
@@ -110,6 +123,8 @@ extern "C" {
 
 
 
+
+
 #define CommandAck_status_ENUMTYPE AckStatus
 
 
@@ -119,6 +134,8 @@ extern "C" {
 #define DoneRequest_init_default                 {0}
 #define PoseResponse_init_default                {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define DoneResponse_init_default                {0}
+#define IdRequest_init_default                   {0}
+#define IdResponse_init_default                  {0}
 #define StatusFrame_init_default                 {0, {PoseRequest_init_default}}
 #define MoveCommand_init_default                 {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define TrajectoryCommand_init_default           {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
@@ -131,6 +148,8 @@ extern "C" {
 #define DoneRequest_init_zero                    {0}
 #define PoseResponse_init_zero                   {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define DoneResponse_init_zero                   {0}
+#define IdRequest_init_zero                      {0}
+#define IdResponse_init_zero                     {0}
 #define StatusFrame_init_zero                    {0, {PoseRequest_init_zero}}
 #define MoveCommand_init_zero                    {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define TrajectoryCommand_init_zero              {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
@@ -143,10 +162,13 @@ extern "C" {
 /* Field tags (for use in manual encoding/decoding) */
 #define PoseResponse_joint_pos_tag               1
 #define DoneResponse_done_tag                    1
+#define IdResponse_id_tag                        1
 #define StatusFrame_pose_req_tag                 1
 #define StatusFrame_done_req_tag                 2
 #define StatusFrame_pose_resp_tag                3
 #define StatusFrame_done_resp_tag                4
+#define StatusFrame_id_req_tag                   5
+#define StatusFrame_id_resp_tag                  6
 #define MoveCommand_joint_pos_tag                1
 #define TrajectoryCommand_joint_pos_tag          1
 #define JointFrame_move_tag                      1
@@ -180,17 +202,31 @@ X(a, STATIC,   SINGULAR, BOOL,     done,              1)
 #define DoneResponse_CALLBACK NULL
 #define DoneResponse_DEFAULT NULL
 
+#define IdRequest_FIELDLIST(X, a) \
+
+#define IdRequest_CALLBACK NULL
+#define IdRequest_DEFAULT NULL
+
+#define IdResponse_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   id,                1)
+#define IdResponse_CALLBACK NULL
+#define IdResponse_DEFAULT NULL
+
 #define StatusFrame_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,pose_req,kind.pose_req),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,done_req,kind.done_req),   2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,pose_resp,kind.pose_resp),   3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (kind,done_resp,kind.done_resp),   4)
+X(a, STATIC,   ONEOF,    MESSAGE,  (kind,done_resp,kind.done_resp),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (kind,id_req,kind.id_req),   5) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (kind,id_resp,kind.id_resp),   6)
 #define StatusFrame_CALLBACK NULL
 #define StatusFrame_DEFAULT NULL
 #define StatusFrame_kind_pose_req_MSGTYPE PoseRequest
 #define StatusFrame_kind_done_req_MSGTYPE DoneRequest
 #define StatusFrame_kind_pose_resp_MSGTYPE PoseResponse
 #define StatusFrame_kind_done_resp_MSGTYPE DoneResponse
+#define StatusFrame_kind_id_req_MSGTYPE IdRequest
+#define StatusFrame_kind_id_resp_MSGTYPE IdResponse
 
 #define MoveCommand_FIELDLIST(X, a) \
 X(a, STATIC,   REPEATED, FLOAT,    joint_pos,         1)
@@ -244,6 +280,8 @@ extern const pb_msgdesc_t PoseRequest_msg;
 extern const pb_msgdesc_t DoneRequest_msg;
 extern const pb_msgdesc_t PoseResponse_msg;
 extern const pb_msgdesc_t DoneResponse_msg;
+extern const pb_msgdesc_t IdRequest_msg;
+extern const pb_msgdesc_t IdResponse_msg;
 extern const pb_msgdesc_t StatusFrame_msg;
 extern const pb_msgdesc_t MoveCommand_msg;
 extern const pb_msgdesc_t TrajectoryCommand_msg;
@@ -258,6 +296,8 @@ extern const pb_msgdesc_t DeltaMessage_msg;
 #define DoneRequest_fields &DoneRequest_msg
 #define PoseResponse_fields &PoseResponse_msg
 #define DoneResponse_fields &DoneResponse_msg
+#define IdRequest_fields &IdRequest_msg
+#define IdResponse_fields &IdResponse_msg
 #define StatusFrame_fields &StatusFrame_msg
 #define MoveCommand_fields &MoveCommand_msg
 #define TrajectoryCommand_fields &TrajectoryCommand_msg
@@ -273,6 +313,8 @@ extern const pb_msgdesc_t DeltaMessage_msg;
 #define DeltaMessage_size                        1217
 #define DoneRequest_size                         0
 #define DoneResponse_size                        2
+#define IdRequest_size                           0
+#define IdResponse_size                          6
 #define JointFrame_size                          1203
 #define MoveCommand_size                         60
 #define PoseRequest_size                         0

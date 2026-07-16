@@ -5,12 +5,20 @@ message DoneRequest  {}
 message PoseResponse { repeated float joint_pos = 1; }
 message DoneResponse { bool done = 1; }
 
+// Whoami: the host asks a board for its chip-derived id (id_req) and the board
+// answers with it (id_resp). Used for discovery — the host addresses id_req to
+// the broadcast id (0) when it does not yet know the board's real id.
+message IdRequest  {}
+message IdResponse { uint32 id = 1; }
+
 message StatusFrame {
     oneof kind {
         PoseRequest  pose_req  = 1;
         DoneRequest  done_req  = 2;
         PoseResponse pose_resp = 3;
         DoneResponse done_resp = 4;
+        IdRequest    id_req    = 5;
+        IdResponse   id_resp   = 6;
     }
 }
 

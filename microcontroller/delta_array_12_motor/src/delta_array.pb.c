@@ -18,6 +18,12 @@ PB_BIND(PoseResponse, PoseResponse, AUTO)
 PB_BIND(DoneResponse, DoneResponse, AUTO)
 
 
+PB_BIND(IdRequest, IdRequest, AUTO)
+
+
+PB_BIND(IdResponse, IdResponse, AUTO)
+
+
 PB_BIND(StatusFrame, StatusFrame, AUTO)
 
 

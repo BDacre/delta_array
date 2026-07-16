@@ -10,6 +10,7 @@
 #include <math.h>
 #include "variables_and_parameters.h"
 
+
 void readJointPositions();
 bool runPidStep();
 void releaseAllMotors();
@@ -22,6 +23,7 @@ static void sendAck(AckStatus status);
 static bool handleStatus(const StatusFrame &status);
 static bool handleJoint(const JointFrame &joint);
 static uint16_t crc16_ccitt(const uint8_t *data, size_t len);
+static uint32_t computeChipId();
 
 // If a frame stalls mid-flight (cable yank, host crash), reset the receive
 // state machine rather than blocking on the missing bytes forever.
@@ -44,10 +46,35 @@ static uint16_t rx_crc_received = 0;
 static unsigned long rx_last_byte_ms = 0;
 
 
+// Derive a stable per-board id from the SAMD21's 128-bit factory serial number.
+// The full 16 bytes don't fit the int32 wire id field, so hash them (FNV-1a)
+// into 32 bits, mask to 31 bits so the id is always a positive int32, and force
+// non-zero so a derived id can never collide with BROADCAST_ID (0). Same chip
+// always yields the same id; different chips effectively never collide.
+static uint32_t computeChipId() {
+  const uint32_t serial_addrs[4] = {
+    SAMD_SERIAL_WORD0, SAMD_SERIAL_WORD1, SAMD_SERIAL_WORD2, SAMD_SERIAL_WORD3,
+  };
+  uint32_t hash = 2166136261UL;  // FNV-1a offset basis
+  for (int w = 0; w < 4; w++) {
+    uint32_t word = *(volatile uint32_t *)serial_addrs[w];
+    for (int b = 0; b < 4; b++) {
+      hash ^= (word >> (8 * b)) & 0xFF;
+      hash *= 16777619UL;         // FNV-1a prime
+    }
+  }
+  hash &= 0x7FFFFFFFUL;           // keep within positive int32 range
+  if (hash == 0) hash = 1;        // reserve 0 for BROADCAST_ID
+  return hash;
+}
+
 void setup() {
   Serial.begin(SERIAL_BAUD);
   while (!Serial)
     delay(10);
+
+  // Establish this board's identity before servicing any commands.
+  my_id = computeChipId();
 
   // Initialize motor shields and ADCs
     MC0.begin();
@@ -270,7 +297,7 @@ static void sendFramedResponse(const DeltaMessage &response){
 // is still polled via StatusFrame.done_req.
 static void sendAck(AckStatus status){
   DeltaMessage response = DeltaMessage_init_zero;
-  response.id = MY_ID;
+  response.id = my_id;
   response.which_payload = DeltaMessage_ack_tag;
   response.payload.ack.status = status;
   sendFramedResponse(response);
@@ -278,7 +305,7 @@ static void sendAck(AckStatus status){
 
 static bool handleStatus(const StatusFrame &status){
   DeltaMessage response = DeltaMessage_init_zero;
-  response.id = MY_ID;
+  response.id = my_id;
   response.which_payload = DeltaMessage_status_tag;
   switch (status.which_kind){
     case StatusFrame_pose_req_tag: {
@@ -294,6 +321,15 @@ static bool handleStatus(const StatusFrame &status){
     case StatusFrame_done_req_tag: {
       response.payload.status.which_kind = StatusFrame_done_resp_tag;
       response.payload.status.kind.done_resp.done = (ctrl_mode == CTRL_IDLE);
+      sendFramedResponse(response);
+      return false;
+    }
+    case StatusFrame_id_req_tag: {
+      // Whoami: report this board's derived id. The DeltaMessage.id above
+      // already carries my_id, so the host learns the id even when it asked
+      // via the broadcast id; id_resp.id restates it explicitly.
+      response.payload.status.which_kind = StatusFrame_id_resp_tag;
+      response.payload.status.kind.id_resp.id = my_id;
       sendFramedResponse(response);
       return false;
     }
@@ -362,7 +398,11 @@ bool decodeNanopbData(){
   DeltaMessage message = DeltaMessage_init_zero;
   pb_istream_t istream = pb_istream_from_buffer(input_cmd, ndx);
   if (!pb_decode(&istream, DeltaMessage_fields, &message)) return false;
-  if (message.id != MY_ID) return false;
+  // Accept frames addressed to this board's own id or to the backdoor/broadcast
+  // id (so a board can be driven before its id is known). Responses still carry
+  // my_id, never the broadcast id. my_id is always a positive int32 (masked to
+  // 31 bits), so the unsigned compare is safe.
+  if ((uint32_t)message.id != my_id && message.id != BROADCAST_ID) return false;
 
   switch (message.which_payload){
     case DeltaMessage_status_tag: return handleStatus(message.payload.status);

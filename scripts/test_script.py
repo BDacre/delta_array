@@ -1,20 +1,19 @@
 
 import time
 
-from delta_control import DeltaArrayEnv
+from delta_control import open_board
 from delta_control.constants import NUM_MOTORS
 
 SETTLE_TIME = 30.0
 TARGET_POS = 0.005
 
-DEFAULT_PORT = "/dev/ttyACM0"
-DEFAULT_ROBOT_ID = 9
+DEFAULT_PORT = None  # None auto-detects the board's port by scanning /dev/ttyACM*
+DEFAULT_BOARD = None  # None auto-discovers; set a BOARD_REGISTRY label or raw id to skip
 
 
-def run(port: str, robot_id: int) -> None:
-    print(f"opening {port} for robot id {robot_id}")
-    env = DeltaArrayEnv(port, active_ids=(robot_id,))
-    agent = env.agents[robot_id]
+def run(port: str, board=None) -> None:
+    env, agent = open_board(port, board)
+    print(f"opening {port}, using board id {env.active_ids[0]}")
 
     try:
         print("homing...")
@@ -36,4 +35,4 @@ def run(port: str, robot_id: int) -> None:
 
 
 if __name__ == "__main__":
-    run(DEFAULT_PORT, DEFAULT_ROBOT_ID) 
+    run(DEFAULT_PORT, DEFAULT_BOARD) 

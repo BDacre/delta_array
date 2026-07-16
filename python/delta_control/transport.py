@@ -1,4 +1,4 @@
-from .constants import FRAME_END, FRAME_START
+from .constants import FRAME_END, FRAME_START, MAX_HUNT_BYTES
 
 
 def crc16_ccitt(data: bytes) -> int:
@@ -36,12 +36,22 @@ class ProtoTransport:
         # Hunt for the start byte, then read by length and verify CRC. Each
         # underlying read() returns short on serial timeout, which we treat
         # as a dropped frame and report as None.
+        #
+        # Bound the hunt: a wrong/chatty port (e.g. another CDC device streaming
+        # bytes that are never our start marker) would otherwise loop forever,
+        # because read() keeps returning data and never times out. After
+        # MAX_HUNT_BYTES discarded non-start bytes we give up and report None so
+        # the caller fails cleanly instead of hanging silently.
+        discarded = 0
         while True:
             b = self.ser.read(1)
             if not b:
                 return None
             if b == FRAME_START:
                 break
+            discarded += 1
+            if discarded > MAX_HUNT_BYTES:
+                return None
 
         header = self.ser.read(2)
         if len(header) != 2:

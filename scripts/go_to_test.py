@@ -7,20 +7,19 @@ returns to home, and closes the port.
 import argparse
 import time
 
-from delta_control import DeltaArrayEnv
+from delta_control import open_board
 from delta_control.constants import NUM_MOTORS
 
 SETTLE_TIME = 60
 TARGET_POS = 0.005
-JOINT_POSITIONS = [0.08, 0.07, 0.07, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
-DEFAULT_PORT = "/dev/ttyACM0"
-DEFAULT_ROBOT_ID = 9
+JOINT_POSITIONS = [0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00]
+DEFAULT_PORT = None  # None auto-detects the board's port by scanning /dev/ttyACM*
+DEFAULT_BOARD = None  # None auto-discovers; set a BOARD_REGISTRY label or raw id to skip
 
 
-def run(port: str, robot_id: int) -> None:
-    print(f"opening {port} for robot id {robot_id}")
-    env = DeltaArrayEnv(port, active_ids=(robot_id,))
-    agent = env.agents[robot_id]
+def run(port: str, board=None) -> None:
+    env, agent = open_board(port, board)
+    print(f"opening {port}, using board id {env.active_ids[0]}")
 
     try:
         print("homing...")
@@ -43,7 +42,7 @@ def run(port: str, robot_id: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", default=DEFAULT_PORT, help="serial port of the delta board")
-    parser.add_argument("--id", type=int, default=DEFAULT_ROBOT_ID, help="active robot id (1-16)")
+    parser.add_argument("--id", default=DEFAULT_BOARD, help="board label (BOARD_REGISTRY) or raw id; omit to auto-discover")
     args = parser.parse_args()
     run(args.port, args.id)
 
