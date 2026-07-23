@@ -33,9 +33,12 @@ BROADCAST_ID = 0
 # Registry mapping a friendly label to a board's chip-derived id. Firmware now
 # derives each board's id from its SAMD21 serial number, so ids are large and
 # not human-chosen. Populate this once per board using scripts/identify_board.py
-# (which prints the discovered id), then address boards by label in host code.
-# Example: BOARD_REGISTRY = {"corner_a": 123456789, "corner_b": 987654321}
-BOARD_REGISTRY: dict[str, int] = {}
+BOARD_REGISTRY: dict[str, int] = {
+    "board0": 855203507,
+    "board1": 1183344710,
+    "board2": 2018580162,
+    "board3": 1159118204,
+}
 
 # Reverse lookup: chip id -> label. Rebuilt from BOARD_REGISTRY; unknown ids
 # simply won't be present.
@@ -64,5 +67,14 @@ ACK_TIMEOUT_S = 6.0
 # a whoami in milliseconds.
 DISCOVERY_TIMEOUT_S = 1.0
 
-# Glob for candidate serial ports scanned during port auto-detection.
+# Glob for candidate serial ports, used as a fallback when USB VID:PID metadata
+# is unavailable (VID:PID filtering is the primary, faster path — see below).
 BOARD_PORT_GLOB = "/dev/ttyACM*"
+
+# USB (vid, pid) pairs treated as candidate delta boards. Delta boards are
+# Adafruit Feather M0s, which enumerate as 239A:800B when running a sketch.
+# Ports that don't match are skipped WITHOUT being opened, so unrelated CDC
+# devices (e.g. an Arduino Uno sharing the /dev/ttyACM* namespace) never slow
+# discovery. Add more (vid, pid) pairs here if you introduce other board types.
+FEATHER_M0_USB_ID = (0x239A, 0x800B)
+BOARD_USB_IDS = frozenset({FEATHER_M0_USB_ID})

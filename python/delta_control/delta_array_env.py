@@ -4,6 +4,7 @@ from math import pi
 
 import numpy as np
 from serial import Serial
+from serial.tools import list_ports
 
 from . import delta_array_pb2
 from .delta_array_agent import DeltaArrayAgent
@@ -11,6 +12,7 @@ from .constants import (
     ACK_TIMEOUT_S,
     BOARD_PORT_GLOB,
     BOARD_REGISTRY,
+    BOARD_USB_IDS,
     BROADCAST_ID,
     DEFAULT_BAUD,
     DISCOVERY_TIMEOUT_S,
@@ -29,6 +31,23 @@ from .transport import ProtoTransport
 
 delta = PrismaticDelta(SIDE_LENGTH_PLATFORM, SIDE_LENGTH_BASE, LEG_LENGTH)
 rc = RoboCoords()
+
+
+def list_board_ports():
+    """Serial ports that look like delta boards, by USB VID:PID.
+
+    Delta boards are Adafruit Feather M0s (BOARD_USB_IDS). Filtering on the USB
+    identity means unrelated CDC devices (e.g. an Arduino Uno on another
+    /dev/ttyACM*) are skipped WITHOUT being opened — no wasted seconds probing a
+    chatty non-board port. Falls back to BOARD_PORT_GLOB only if no VID:PID
+    metadata is available (unusual on Linux USB CDC).
+    """
+    matched = sorted(
+        p.device for p in list_ports.comports() if (p.vid, p.pid) in BOARD_USB_IDS
+    )
+    if matched:
+        return matched
+    return sorted(glob.glob(BOARD_PORT_GLOB))
 
 
 class DiscoveryError(RuntimeError):
@@ -71,38 +90,95 @@ def discover_board_id(transport, *, attempts=3):
 
 
 class DeltaArrayEnv:
-    def __init__(self, port, *, active_ids=None, baud=DEFAULT_BAUD):
-        # timeout bounds how long read_frame() waits before giving up; sized to
-        # tolerate a worst-case in-flight move on the firmware before its ACK.
-        self.ser = Serial(port, baud, timeout=ACK_TIMEOUT_S)
-        self.transport = ProtoTransport(self.ser)
-        # active_ids=None (default) auto-discovers the single connected board's
-        # chip-derived id via broadcast whoami. Pass explicit ids to skip
-        # discovery (e.g. a known id from BOARD_REGISTRY, or a shared-bus setup).
-        if active_ids is None:
-            discovered = discover_board_id(self.transport)
-            if discovered is None:
+    """Controls one or more delta boards, one board per serial port.
+
+    Each board lives on its own /dev/ttyACM* port. The env opens a serial
+    connection per board, learns each board's chip-derived id via a broadcast
+    whoami, and keys agents by that id. `agents[id]` (or `agent_for(label)` via
+    BOARD_REGISTRY) addresses one board; iterate `active_ids` to command them all.
+
+    ports:
+      * None (default) -> scan BOARD_PORT_GLOB and open every board found.
+      * a single port path, or an iterable of port paths -> open just those.
+    ids:
+      * None (default) -> keep every board discovered.
+      * an iterable of ids and/or BOARD_REGISTRY labels -> keep only those; a
+        requested id that never answers raises DiscoveryError.
+    """
+
+    def __init__(self, ports=None, *, ids=None, baud=DEFAULT_BAUD):
+        wanted = _resolve_id_filter(ids)
+
+        if ports is None:
+            candidates = list_board_ports()
+        elif isinstance(ports, str):
+            candidates = [ports]
+        else:
+            candidates = list(ports)
+
+        # board_id -> (port, ProtoTransport). One serial connection per board.
+        self._conns = {}
+        self.agents = {}
+        try:
+            for port in candidates:
+                try:
+                    # Open with the short discovery timeout so a wrong/dead port
+                    # is skipped quickly; bumped to ACK_TIMEOUT_S once identified.
+                    ser = Serial(port, baud, timeout=DISCOVERY_TIMEOUT_S)
+                except Exception:
+                    continue  # port busy or vanished — skip it
+                transport = ProtoTransport(ser)
+                board_id = discover_board_id(transport)
+                if board_id is None:
+                    ser.close()
+                    continue  # no delta board answered on this port
+                if wanted is not None and board_id not in wanted:
+                    ser.close()
+                    continue
+                if board_id in self.agents:
+                    ser.close()
+                    continue  # id already claimed (same board seen on two ports)
+                # Reads must now tolerate a worst-case in-flight move before the ACK.
+                ser.timeout = ACK_TIMEOUT_S
+                self._conns[board_id] = (port, transport)
+                self.agents[board_id] = DeltaArrayAgent(transport, board_id)
+        except BaseException:
+            self.close()
+            raise
+
+        where = candidates or "any connected Feather M0 port"
+        if wanted is not None:
+            missing = wanted - set(self.agents)
+            if missing:
                 self.close()
-                raise DiscoveryError(
-                    f"no board answered whoami on {port} "
-                    f"(check connection / port / baud)"
-                )
-            active_ids = (discovered,)
-        self.active_ids = tuple(active_ids)
-        self.agents = {i: DeltaArrayAgent(self.transport, i) for i in self.active_ids}
+                raise DiscoveryError(f"boards {sorted(missing)} not found on {where}")
+        if not self.agents:
+            self.close()
+            raise DiscoveryError(f"no delta boards found on {where}")
+
+        self.active_ids = tuple(sorted(self.agents))
         self.done_states = np.array([0] * 12)
         self.lowz = 0.08
         self.highz = 0.11
 
     @property
     def agent(self):
-        # Convenience for the common single-board case: the one discovered/active
-        # agent. Raises if the env holds more than one board.
+        # Convenience for the single-board case: the one active agent. Raises if
+        # the env holds more than one board — index agents[id] / agent_for() then.
         if len(self.active_ids) != 1:
             raise ValueError(
-                f"env has {len(self.active_ids)} boards; index self.agents[id] instead"
+                f"env holds {len(self.active_ids)} boards {self.active_ids}; "
+                f"index agents[id] or use agent_for(id_or_label) instead"
             )
         return self.agents[self.active_ids[0]]
+
+    def agent_for(self, id_or_label):
+        # Look up an agent by raw id or by BOARD_REGISTRY label.
+        return self.agents[_resolve_board_id(id_or_label)]
+
+    def port_for(self, id_or_label):
+        # The serial port a given board id / label was found on.
+        return self._conns[_resolve_board_id(id_or_label)][0]
 
     def reset(self):
         pt = np.array(delta.ik(HOME_POSITION))
@@ -112,11 +188,14 @@ class DeltaArrayEnv:
             self.agents[i].move_joint_position(jts)
 
     def close(self):
-        # Release the serial port; safe to call even if the transport is
-        # already closed or was never fully opened.
-        transport = getattr(self, "transport", None)
-        if transport is not None:
-            transport.close()
+        # Release every serial port. Safe to call repeatedly, or on a partially
+        # constructed env (e.g. from an error mid-__init__).
+        for _port, transport in getattr(self, "_conns", {}).values():
+            try:
+                transport.close()
+            except Exception:
+                pass
+        self._conns = {}
 
     # def move_over_trajectory(self, traj="vertical"):
     #     if traj == "circle":
@@ -209,18 +288,16 @@ class DeltaArrayEnv:
     #         time.sleep(4)
 
 
-def find_board_ports(pattern=BOARD_PORT_GLOB, *, baud=DEFAULT_BAUD):
-    """Scan serial ports and return [(port, board_id), ...] for those that answer
-    a broadcast whoami.
+def find_board_ports(*, baud=DEFAULT_BAUD):
+    """Scan Feather M0 ports and return [(port, board_id), ...] for those that
+    answer a broadcast whoami.
 
-    Lets the host locate the board's port automatically even when ttyACM
-    enumeration order changes or another CDC device shares the /dev/ttyACM*
-    namespace. Only sends a whoami (no motion), so probing every port is safe.
-    Uses a short read timeout, and read_frame() bails on a chatty non-protocol
-    port, so a dead/wrong port is skipped quickly.
+    Only considers ports matching a delta board's USB VID:PID (see
+    list_board_ports), so unrelated CDC devices are never opened. Sends only a
+    whoami (no motion), so probing is safe. Uses a short read timeout.
     """
     found = []
-    for port in sorted(glob.glob(pattern)):
+    for port in list_board_ports():
         try:
             ser = Serial(port, baud, timeout=DISCOVERY_TIMEOUT_S)
         except Exception:
@@ -251,45 +328,29 @@ def _resolve_board_id(id_or_label):
     return int(id_or_label)
 
 
+def _resolve_id_filter(ids):
+    """Map an iterable of ids/labels to a set of concrete ids, or None for all."""
+    if ids is None:
+        return None
+    return {_resolve_board_id(x) for x in ids}
+
+
 def open_board(port=None, id_or_label=None, *, baud=DEFAULT_BAUD):
-    """Open a single-board env and return (env, agent).
+    """Open a single board and return (env, agent).
 
-    port selects the serial port:
-      * None -> auto-detect by scanning BOARD_PORT_GLOB for a board that answers
-        a whoami. If id_or_label names a specific board, the matching port is
-        chosen; otherwise exactly one board must be present.
-      * a path (e.g. "/dev/ttyACM1") -> use that port directly.
-
-    id_or_label selects which board:
-      * None -> auto-discover the connected board's chip-derived id (default).
-      * int (or numeric str) -> address that raw id, skipping discovery.
-      * str -> look the label up in BOARD_REGISTRY.
+    Thin single-board convenience over DeltaArrayEnv.
+      * port None -> scan BOARD_PORT_GLOB; a path (or list) -> open just that.
+      * id_or_label None -> the one board found; an id or BOARD_REGISTRY label ->
+        that specific board.
+    Raises DiscoveryError unless the selection resolves to exactly one board.
     """
-    board_id = _resolve_board_id(id_or_label)
-
-    if port is None:
-        found = find_board_ports(baud=baud)
-        if not found:
-            raise DiscoveryError(
-                f"no delta board answered whoami on any {BOARD_PORT_GLOB} port "
-                f"(check power / USB / that the board is flashed)"
-            )
-        if board_id is not None:
-            matches = [p for p, bid in found if bid == board_id]
-            if not matches:
-                raise DiscoveryError(
-                    f"board id {board_id} not found; discovered: {found}"
-                )
-            port = matches[0]
-        elif len(found) == 1:
-            port, board_id = found[0]
-        else:
-            raise DiscoveryError(
-                f"multiple boards found: {found}; pass an explicit port or id"
-            )
-
-    if board_id is None:
-        env = DeltaArrayEnv(port, baud=baud)
-    else:
-        env = DeltaArrayEnv(port, active_ids=(board_id,), baud=baud)
+    ids = None if id_or_label is None else [id_or_label]
+    env = DeltaArrayEnv(ports=port, ids=ids, baud=baud)
+    if len(env.active_ids) != 1:
+        found = env.active_ids
+        env.close()
+        raise DiscoveryError(
+            f"expected exactly one board, found {found}; "
+            f"pass a port or id_or_label to disambiguate"
+        )
     return env, env.agent

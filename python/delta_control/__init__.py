@@ -13,6 +13,7 @@ from .delta_array_env import (
     DiscoveryError,
     discover_board_id,
     find_board_ports,
+    list_board_ports,
     open_board,
 )
 from .transport import ProtoTransport
@@ -26,6 +27,7 @@ __all__ = [
     "DiscoveryError",
     "discover_board_id",
     "find_board_ports",
+    "list_board_ports",
     "open_board",
     "MAX_JOINT_POS",
     "MAX_TRAJECTORY_ROWS",
