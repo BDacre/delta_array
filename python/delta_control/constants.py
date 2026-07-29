@@ -1,5 +1,3 @@
-import numpy as np
-
 NUM_MOTORS = 12
 MOTORS_PER_DELTA = 3
 DELTAS_PER_BOARD = NUM_MOTORS // MOTORS_PER_DELTA  # 4
@@ -29,8 +27,9 @@ TIP_HEIGHT = 0.019  # 19 mm
 TIP_RADIUS = 0.0075
 EE_Z_OFFSET = TIP_HEIGHT + PLATFORM_TRIANGLE_HEIGHT
 
-# Default home pose for the EE: centered (x=0, y=0), mid-workspace (z=0.08).
-HOME_POSITION = (0.0, 0.0, 0.08)
+# Default home pose for the EE tip: FK of all three actuators at the center of
+# their travel (0.05675 m). Recompute if the geometry or EE offset changes.
+HOME_POSITION = (0.0, 0.0, 0.13648692036511054)
 
 # Physical layout of robots in the 8x8 array (meters).
 # Triangular grid: every other column is offset by half the row pitch.
