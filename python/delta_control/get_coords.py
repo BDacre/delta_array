@@ -7,15 +7,16 @@ from .constants import (
     ROBOT_PITCH_X,
     ROBOT_PITCH_X_HALF,
     ROBOT_PITCH_Y,
-    SIDE_LENGTH_BASE,
-    SIDE_LENGTH_PLATFORM,
+    BASE_TRIANGLE_SIDE_LEN,
+    PLATFORM_TRIANGLE_SIDE_LEN,
+    EE_Z_OFFSET,
 )
 from .prismatic_delta import PrismaticDelta
 
 
 class RoboCoords:
     def __init__(self):
-        self.delta = PrismaticDelta(SIDE_LENGTH_PLATFORM, SIDE_LENGTH_BASE, LEG_LENGTH)
+        self.delta = PrismaticDelta(PLATFORM_TRIANGLE_SIDE_LEN, BASE_TRIANGLE_SIDE_LEN, LEG_LENGTH, EE_Z_OFFSET)
         self.robot_positions = np.zeros((8, 8, 2))
         self.delta_array = np.zeros((8, 8))
         self.rot_30 = np.pi / 6

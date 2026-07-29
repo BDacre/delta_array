@@ -18,8 +18,9 @@ from .constants import (
     DISCOVERY_TIMEOUT_S,
     HOME_POSITION,
     LEG_LENGTH,
-    SIDE_LENGTH_BASE,
-    SIDE_LENGTH_PLATFORM,
+    BASE_TRIANGLE_SIDE_LEN,
+    PLATFORM_TRIANGLE_SIDE_LEN,
+    EE_Z_OFFSET,
     NUM_MOTORS,
     MIN_JOINT_POS,
     MAX_JOINT_POS,
@@ -29,7 +30,7 @@ from .get_coords import RoboCoords
 from .prismatic_delta import PrismaticDelta
 from .transport import ProtoTransport
 
-delta = PrismaticDelta(SIDE_LENGTH_PLATFORM, SIDE_LENGTH_BASE, LEG_LENGTH)
+delta = PrismaticDelta(PLATFORM_TRIANGLE_SIDE_LEN, BASE_TRIANGLE_SIDE_LEN, LEG_LENGTH, EE_Z_OFFSET)
 rc = RoboCoords()
 
 

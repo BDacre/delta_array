@@ -1,13 +1,33 @@
+import numpy as np
+
 NUM_MOTORS = 12
+MOTORS_PER_DELTA = 3
+DELTAS_PER_BOARD = NUM_MOTORS // MOTORS_PER_DELTA  # 4
 
 # Joint position limits (meters of prismatic travel).
 MIN_JOINT_POS = 0.005
 MAX_JOINT_POS = 0.0985
 
 # Delta robot geometry (meters).
-SIDE_LENGTH_PLATFORM = 0.015
-SIDE_LENGTH_BASE = 0.043
-LEG_LENGTH = 0.045
+END_EFFECTOR_TRIANGLE_SIDE_LEN = 0.024
+# Triangle formed by the upper leg connection points. Legs connect at the
+# midpoints of the end-effector triangle's sides, so by the midsegment theorem
+# this side length is half the end-effector triangle's. This is the platform
+# triangle the kinematics actually solves against.
+PLATFORM_TRIANGLE_SIDE_LEN = END_EFFECTOR_TRIANGLE_SIDE_LEN / 2
+# Distance between the linear actuator rails (the base triangle).
+BASE_TRIANGLE_SIDE_LEN = 0.0213908
+LEG_LENGTH = 0.045 + 2*0.0055 # leg plus hinges
+
+# Vertical offset (+z, along the platform normal) from the platform (leg-
+# connection) triangle plane up to the end-effector reference point that IK/FK
+# report. The tip sits TIP_HEIGHT above the platform, which is itself
+# PLATFORM_TRIANGLE_HEIGHT tall. IK subtracts EE_Z_OFFSET to recover the
+# platform center it solves against; FK adds it back so it returns the tip.
+PLATFORM_TRIANGLE_HEIGHT = 0.005
+TIP_HEIGHT = 0.019  # 19 mm
+TIP_RADIUS = 0.0075
+EE_Z_OFFSET = TIP_HEIGHT + PLATFORM_TRIANGLE_HEIGHT
 
 # Default home pose for the EE: centered (x=0, y=0), mid-workspace (z=0.08).
 HOME_POSITION = (0.0, 0.0, 0.08)

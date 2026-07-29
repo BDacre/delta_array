@@ -11,11 +11,15 @@ class PrismaticDelta:
     # so every part of the mechanism uses a consistent vertex ordering.
     VERTEX_ANGLES = (math.pi / 2, -math.pi / 6, 7 * math.pi / 6)
 
-    def __init__(self, platform_side_length, base_side_length, lower_leg_length):
+    def __init__(self, platform_side_length, base_side_length, lower_leg_length, ee_z_offset=0.0):
 
         self.platform_side_length = platform_side_length
         self.base_side_length = base_side_length
         self.lower_leg_length = lower_leg_length
+
+        # Vertical (+z) offset from the platform-triangle plane the leg geometry
+        # solves in, up to the end-effector reference point IK accepts / FK returns.
+        self.ee_z_offset = ee_z_offset
 
         self.side_length_platform = platform_side_length
         self.side_length_base = base_side_length
@@ -88,8 +92,11 @@ class PrismaticDelta:
             if np.any(np.isnan(heights)) or np.any(heights < 0):
                 continue
 
+            # heights are in the platform-center frame, so measure the carriage
+            # angle from the platform-center z (pt is the offset EE reference).
+            platform_center_z = pt[2] - self.ee_z_offset
             carriage_joint_angles = math.pi / 2 - np.arcsin(
-                np.clip((pt[2] - heights) / self.lower_leg_length, -1.0, 1.0))
+                np.clip((platform_center_z - heights) / self.lower_leg_length, -1.0, 1.0))
             if np.any(carriage_joint_angles > carriage_joint_lim):
                 continue
 
@@ -102,7 +109,7 @@ class PrismaticDelta:
 
     def is_valid(self, pt, max_height):
         """True if pt is reachable with every actuator height in [0, max_height]."""
-        heights = self.IK(pt)
+        heights = self.ik(pt)
         if np.any(np.isnan(heights)):  # unreachable (xy offset exceeds leg length)
             return False
         return bool(np.all(heights >= 0) and np.all(heights <= max_height))
@@ -115,7 +122,10 @@ class PrismaticDelta:
         length for some actuator). NaN is used rather than a magic sentinel so an
         unreachable request can never be mistaken for a valid command downstream.
         """
-        position = np.asarray(position, dtype=float).reshape(3)
+        # Incoming position is the end-effector reference point; shift down to the
+        # platform-center frame the leg geometry solves in.
+        position = np.asarray(position, dtype=float).reshape(3).copy()
+        position[2] -= self.ee_z_offset
         base_vertices = (self.base_vertex_1, self.base_vertex_2, self.base_vertex_3)
         platform_vertex_offsets = self._triangle_vertices(self.platform_circumradius)
         squared_leg_length = self.lower_leg_length ** 2
@@ -198,6 +208,8 @@ class PrismaticDelta:
         leg_length = self.lower_leg_length
         position = self.interx(shifted_sphere_center_1, shifted_sphere_center_2, shifted_sphere_center_3, leg_length, leg_length, leg_length, 1)
         position = np.transpose(position[0:3])
+        # Shift from the platform-center frame up to the end-effector reference point.
+        position[0, 2] += self.ee_z_offset
 
         return position
 
