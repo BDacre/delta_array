@@ -1,2 +1,3 @@
 *.pyc
 /.claude/
+/generated_files/
