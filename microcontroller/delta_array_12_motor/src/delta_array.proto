@@ -11,14 +11,27 @@ message DoneResponse { bool done = 1; }
 message IdRequest  {}
 message IdResponse { uint32 id = 1; }
 
+// Diagnostics telemetry: the host asks for per-motor control state (telemetry_req)
+// and the board answers (telemetry_resp) with position, PID error, and the last
+// applied signed PWM for all 12 motors. Used to characterize the motors (e.g.
+// breakaway friction, open-loop velocity) and to observe closed-loop moves.
+message TelemetryRequest  {}
+message TelemetryResponse {
+    repeated float  position = 1;   // 12, meters
+    repeated float  error    = 2;   // 12, meters (joint_positions - target)
+    repeated sint32 pwm      = 3;   // 12, last applied signed PWM (-255..255, 0 = released)
+}
+
 message StatusFrame {
     oneof kind {
-        PoseRequest  pose_req  = 1;
-        DoneRequest  done_req  = 2;
-        PoseResponse pose_resp = 3;
-        DoneResponse done_resp = 4;
-        IdRequest    id_req    = 5;
-        IdResponse   id_resp   = 6;
+        PoseRequest       pose_req       = 1;
+        DoneRequest       done_req       = 2;
+        PoseResponse      pose_resp      = 3;
+        DoneResponse      done_resp      = 4;
+        IdRequest         id_req         = 5;
+        IdResponse        id_resp        = 6;
+        TelemetryRequest  telemetry_req  = 7;
+        TelemetryResponse telemetry_resp = 8;
     }
 }
 
@@ -27,12 +40,24 @@ message TrajectoryCommand { repeated float joint_pos = 1; }
 message ResetCommand      {}
 message StopCommand       {}
 
+// Open-loop diagnostics: drive a single motor at a fixed PWM, bypassing the PID.
+// The board releases all other motors first (so this never fights the PID) and
+// auto-releases the driven motor after duration_ms (a safety timeout, so a lost
+// host can't leave a motor driven). Used to measure static-friction breakaway
+// and open-loop velocity vs PWM.
+message SetPwmCommand {
+    uint32 motor_index = 1;   // 0..11
+    sint32 pwm         = 2;   // signed: sign = direction, |pwm| clamped to 0..255
+    uint32 duration_ms = 3;   // auto-release after this; 0 => default, clamped to the move timeout
+}
+
 message JointFrame {
     oneof kind {
-        MoveCommand       move  = 1;
-        TrajectoryCommand traj  = 2;
-        ResetCommand      reset = 3;
-        StopCommand       stop  = 4;
+        MoveCommand       move    = 1;
+        TrajectoryCommand traj    = 2;
+        ResetCommand      reset   = 3;
+        StopCommand       stop    = 4;
+        SetPwmCommand     set_pwm = 5;
     }
 }
 

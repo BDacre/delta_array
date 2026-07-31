@@ -108,6 +108,18 @@ void loop() {
 
   if (ctrl_mode == CTRL_IDLE) return;
 
+  // CTRL_OPENLOOP: one motor is held at a fixed PWM for diagnostics. The PID is
+  // bypassed entirely; we only enforce the safety auto-release deadline. The
+  // subtraction compare is rollover-safe.
+  if (ctrl_mode == CTRL_OPENLOOP) {
+    if ((int32_t)(millis() - openloop_deadline) >= 0) {
+      releaseAllMotors();
+      openloop_motor = -1;
+      ctrl_mode = CTRL_IDLE;
+    }
+    return;
+  }
+
   bool reached = runPidStep();
 
   if (ctrl_mode == CTRL_HOLD) {
@@ -153,23 +165,26 @@ bool runPidStep(){
   for(int i = 0; i < NUM_MOTORS; i++){
     joint_errors[i] = joint_positions[i] - new_joint_positions[i];
     float pid = KP * joint_errors[i] + KI * total_joint_errors[i] + KD * (joint_errors[i] - last_joint_errors[i]) / time_elapsed;
-    if(joint_errors[i] > position_threshold){
+    if(joint_errors[i] > POSITION_THRESHOLD){
       int motor_speed = (int)(min(max(0.0, pid), 1.0) * PWM_MAX);
       reached = false;
       motors[i]->setSpeed(motor_speed);
       motors[i]->run(BACKWARD);
+      applied_pwm[i] = motor_speed;   // BACKWARD -> positive (matches sign convention)
       total_joint_errors[i] += joint_errors[i];
     }
-    else if(joint_errors[i] < -position_threshold){
+    else if(joint_errors[i] < -POSITION_THRESHOLD){
       int motor_speed = (int)(min(max(-1.0, pid), 0.0) * -PWM_MAX);
       reached = false;
       motors[i]->setSpeed(motor_speed);
       motors[i]->run(FORWARD);
+      applied_pwm[i] = -motor_speed;  // FORWARD -> negative
       total_joint_errors[i] += joint_errors[i];
     }
     else{
       motors[i]->setSpeed(0);
       motors[i]->run(RELEASE);
+      applied_pwm[i] = 0;
       total_joint_errors[i] = 0.0;
     }
     last_joint_errors[i] = joint_errors[i];
@@ -182,6 +197,7 @@ void releaseAllMotors(){
   for(int i = 0; i < NUM_MOTORS; i++){
     motors[i]->setSpeed(0);
     motors[i]->run(RELEASE);
+    applied_pwm[i] = 0;
   }
 }
 
@@ -333,6 +349,24 @@ static bool handleStatus(const StatusFrame &status){
       sendFramedResponse(response);
       return false;
     }
+    case StatusFrame_telemetry_req_tag: {
+      // Diagnostics: report per-motor position, PID error, and last applied PWM.
+      // Read-only, safe in any control mode. error/pwm reflect the most recent
+      // control step (updated by runPidStep / the open-loop drive).
+      readJointPositions();
+      response.payload.status.which_kind = StatusFrame_telemetry_resp_tag;
+      TelemetryResponse &t = response.payload.status.kind.telemetry_resp;
+      t.position_count = NUM_MOTORS;
+      t.error_count = NUM_MOTORS;
+      t.pwm_count = NUM_MOTORS;
+      for (int i = 0; i < NUM_MOTORS; i++){
+        t.position[i] = joint_positions[i];
+        t.error[i] = joint_errors[i];
+        t.pwm[i] = applied_pwm[i];
+      }
+      sendFramedResponse(response);
+      return false;
+    }
     default:
       return false;
   }
@@ -384,7 +418,38 @@ static bool handleJoint(const JointFrame &joint){
     }
     case JointFrame_stop_tag: {
       releaseAllMotors();
+      openloop_motor = -1;
       ctrl_mode = CTRL_IDLE;
+      sendAck(AckStatus_ACK_OK);
+      return true;
+    }
+    case JointFrame_set_pwm_tag: {
+      // Diagnostics: drive one motor open-loop at a fixed PWM, PID bypassed.
+      const SetPwmCommand &cmd = joint.kind.set_pwm;
+      if (cmd.motor_index >= (uint32_t)NUM_MOTORS) {
+        sendAck(AckStatus_ACK_VALIDATION_FAIL);
+        return false;
+      }
+      int idx = (int)cmd.motor_index;
+      // Clamp magnitude to PWM_MAX; sign of pwm selects direction.
+      int mag = (cmd.pwm >= 0) ? cmd.pwm : -cmd.pwm;
+      if (mag > (int)PWM_MAX) mag = (int)PWM_MAX;
+      // Clamp the auto-release window; 0 -> default. Never longer than the move
+      // timeout, so a lost host can't leave a motor driven indefinitely.
+      unsigned long dur = cmd.duration_ms;
+      if (dur == 0) dur = OPENLOOP_DEFAULT_MS;
+      if (dur > MOVE_TIMEOUT_MS) dur = MOVE_TIMEOUT_MS;
+      // Release everything first so only the target motor moves and it never
+      // fights the PID, then drive the one motor.
+      releaseAllMotors();
+      if (mag > 0) {
+        motors[idx]->setSpeed(mag);
+        motors[idx]->run(cmd.pwm >= 0 ? BACKWARD : FORWARD);
+        applied_pwm[idx] = (cmd.pwm >= 0) ? mag : -mag;
+      }
+      openloop_motor = idx;
+      openloop_deadline = millis() + dur;
+      ctrl_mode = CTRL_OPENLOOP;
       sendAck(AckStatus_ACK_OK);
       return true;
     }

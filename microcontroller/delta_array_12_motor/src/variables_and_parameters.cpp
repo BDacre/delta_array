@@ -62,6 +62,12 @@ ControlMode ctrl_mode = CTRL_IDLE;
 unsigned long target_start_ms = 0;
 
 // ---------------------------------------------------------
+// Open-loop (diagnostics) state
+// ---------------------------------------------------------
+int openloop_motor = -1;
+unsigned long openloop_deadline = 0;
+
+// ---------------------------------------------------------
 // Trajectory state
 // ---------------------------------------------------------
 float trajectory[MAX_TRAJ_ROWS][NUM_MOTORS] = {{0.0f}};
@@ -78,9 +84,10 @@ float time_elapsed;
 float joint_positions[NUM_MOTORS] = {0.0};
 float new_joint_positions[NUM_MOTORS] = {0.0};
 
-float position_threshold = 0.0008;
+float POSITION_THRESHOLD = 0.0008;
 float joint_errors[NUM_MOTORS] = {0.0};
 float last_joint_errors[NUM_MOTORS] = {0.0};
 float total_joint_errors[NUM_MOTORS] = {0.0};
 
 int motor_val[NUM_MOTORS] = {0};
+int applied_pwm[NUM_MOTORS] = {0};

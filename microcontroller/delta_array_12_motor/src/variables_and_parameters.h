@@ -73,10 +73,11 @@ extern uint32_t my_id;
 // plus header and bool fields. ~1200 B leaves headroom for the encoded message.
 #define NUM_CHARS 2048 //Max is (DeltaMessage_size + 16), 1217 for 12*20 but leave headroom for safety
 
-// Outbound responses (pose_resp, done_resp) are small — 12 floats + framing
-// fits well under 256 B. Keep this separate from NUM_CHARS so we don't burn
-// 2 KB of stack on every response.
-#define RESPONSE_BUF_BYTES 256
+// Outbound responses. pose_resp/done_resp are tiny, but telemetry_resp carries
+// three 12-element arrays (position + error + pwm) ~ 200 B encoded, so give it
+// headroom. Kept separate from NUM_CHARS so we don't burn 2 KB of stack per
+// response.
+#define RESPONSE_BUF_BYTES 384
 
 // ---------------------------------------------------------
 // Motor hardware
@@ -127,15 +128,26 @@ extern uint8_t endMarker;
 // CTRL_IDLE: motors released, no active target.
 // CTRL_HOLD: driving toward a single target (MoveCommand / ResetCommand).
 // CTRL_TRAJ: stepping through trajectory[] rows; advances to the next row
-//            once all joints settle within position_threshold.
+//            once all joints settle within POSITION_THRESHOLD.
+// CTRL_OPENLOOP: diagnostics only — one motor driven at a fixed PWM (PID bypassed),
+//            auto-released at openloop_deadline. Set by SetPwmCommand.
 enum ControlMode : uint8_t {
   CTRL_IDLE = 0,
   CTRL_HOLD = 1,
   CTRL_TRAJ = 2,
+  CTRL_OPENLOOP = 3,
 };
 
 extern ControlMode ctrl_mode;
 extern unsigned long target_start_ms;
+
+// ---------------------------------------------------------
+// Open-loop (diagnostics) state
+// ---------------------------------------------------------
+// Default auto-release window for a SetPwmCommand with duration_ms == 0.
+#define OPENLOOP_DEFAULT_MS 500UL
+extern int openloop_motor;              // motor being driven, or -1 when none
+extern unsigned long openloop_deadline; // millis() at which to auto-release
 
 // ---------------------------------------------------------
 // Trajectory state
@@ -154,11 +166,16 @@ extern float time_elapsed;
 extern float joint_positions[NUM_MOTORS];
 extern float new_joint_positions[NUM_MOTORS];
 
-extern float position_threshold;
+extern float POSITION_THRESHOLD;
 extern float joint_errors[NUM_MOTORS];
 extern float last_joint_errors[NUM_MOTORS];
 extern float total_joint_errors[NUM_MOTORS];
 
 extern int motor_val[NUM_MOTORS];
+
+// Last signed PWM applied to each motor (-PWM_MAX..PWM_MAX; 0 = released).
+// Recorded by both the PID (runPidStep) and the open-loop drive so telemetry
+// reflects what the motors are actually doing.
+extern int applied_pwm[NUM_MOTORS];
 
 #endif // VARIABLES_AND_PARAMETERS_H

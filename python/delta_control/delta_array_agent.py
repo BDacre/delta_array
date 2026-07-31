@@ -121,6 +121,43 @@ class DeltaArrayAgent:
             self.current_joint_positions = list(reply.status.pose_resp.joint_pos)
         return self.current_joint_positions
 
+    def set_motor_pwm(self, motor_index, pwm, duration_ms=0):
+        # Diagnostics: drive one motor open-loop at a fixed PWM, bypassing the
+        # PID. The firmware releases all other motors first and auto-releases
+        # this one after duration_ms (0 -> firmware default, clamped to the move
+        # timeout) so a lost host can't leave a motor driven. Sign of pwm selects
+        # direction; magnitude is clamped to 255 on the firmware too.
+        assert 0 <= motor_index < NUM_MOTORS, (
+            f"motor_index must be 0..{NUM_MOTORS - 1}, got {motor_index}"
+        )
+        assert -255 <= pwm <= 255, f"pwm must be -255..255, got {pwm}"
+        msg = self._envelope()
+        msg.joint.set_pwm.motor_index = int(motor_index)
+        msg.joint.set_pwm.pwm = int(pwm)
+        msg.joint.set_pwm.duration_ms = int(duration_ms)
+        self._send_command(msg)
+
+    def get_telemetry(self):
+        # Per-motor diagnostics: position (m), PID error (m), and last applied
+        # signed PWM (-255..255, 0 = released). error/pwm reflect the most recent
+        # control step, so they are most meaningful during an active move.
+        # Returns a dict of 12-lists, or None if no valid reply arrived.
+        msg = self._envelope()
+        msg.status.telemetry_req.SetInParent()
+        reply = self._send(msg)
+        if (
+            reply is not None
+            and reply.HasField("status")
+            and reply.status.HasField("telemetry_resp")
+        ):
+            t = reply.status.telemetry_resp
+            return {
+                "position": list(t.position),
+                "error": list(t.error),
+                "pwm": list(t.pwm),
+            }
+        return None
+
     def reset(self):
         msg = self._envelope()
         msg.joint.reset.SetInParent()

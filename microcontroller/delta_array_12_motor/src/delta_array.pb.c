@@ -24,6 +24,12 @@ PB_BIND(IdRequest, IdRequest, AUTO)
 PB_BIND(IdResponse, IdResponse, AUTO)
 
 
+PB_BIND(TelemetryRequest, TelemetryRequest, AUTO)
+
+
+PB_BIND(TelemetryResponse, TelemetryResponse, AUTO)
+
+
 PB_BIND(StatusFrame, StatusFrame, AUTO)
 
 
@@ -37,6 +43,9 @@ PB_BIND(ResetCommand, ResetCommand, AUTO)
 
 
 PB_BIND(StopCommand, StopCommand, AUTO)
+
+
+PB_BIND(SetPwmCommand, SetPwmCommand, AUTO)
 
 
 PB_BIND(JointFrame, JointFrame, 2)

@@ -1,3 +1,6 @@
 PoseResponse.joint_pos      max_count:12
 MoveCommand.joint_pos       max_count:12
 TrajectoryCommand.joint_pos max_count:240
+TelemetryResponse.position  max_count:12
+TelemetryResponse.error     max_count:12
+TelemetryResponse.pwm       max_count:12
