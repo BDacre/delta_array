@@ -38,7 +38,7 @@ SETTLE_TIME = 2.0  # seconds to let the start position seat before stepping
 # Outputs are collected under <repo>/generated_files/<test>/ so runs don't litter
 # the working directory. Anchored to the repo (not cwd) so it lands in the same
 # place regardless of where the script is launched from.
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_OUTDIR = os.path.join(REPO_ROOT, "generated_files")
 TEST_NAME = "step_response"
 

@@ -42,7 +42,7 @@ DEFAULT_BOARD = None  # None auto-discovers; set a BOARD_REGISTRY label or raw i
 # Outputs are collected under <repo>/generated_files/<test>/ so runs don't litter
 # the working directory. Anchored to the repo (not cwd) so it lands in the same
 # place regardless of where the script is launched from.
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_OUTDIR = os.path.join(REPO_ROOT, "generated_files")
 TEST_NAME = "staircase"
 

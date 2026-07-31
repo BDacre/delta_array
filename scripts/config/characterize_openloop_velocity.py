@@ -41,7 +41,7 @@ from delta_control.constants import (
 DEFAULT_PORT = None  # None auto-detects the board's port by scanning /dev/ttyACM*
 DEFAULT_BOARD = None  # None auto-discovers; set a BOARD_REGISTRY label or raw id to skip
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_OUTDIR = os.path.join(REPO_ROOT, "generated_files")
 TEST_NAME = "openloop_velocity"
 

@@ -39,7 +39,7 @@ Topology: **one board per USB serial port**. Flow:
    `env.active_ids`. One env manages many ports/boards.
 4. **`BOARD_REGISTRY`** (in `constants.py`) maps friendly labels → ids, so code
    can address boards by name instead of the raw number. Populate it with
-   `scripts/identify_board.py`.
+   `scripts/maintenance/identify_board.py`.
 
 The port number (`ttyACM0` vs `ttyACM1`) is irrelevant — addressing is by id,
 mapped to whatever port that id is found on this session.

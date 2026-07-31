@@ -51,7 +51,7 @@ BROADCAST_ID = 0
 
 # Registry mapping a friendly label to a board's chip-derived id. Firmware now
 # derives each board's id from its SAMD21 serial number, so ids are large and
-# not human-chosen. Populate this once per board using scripts/identify_board.py
+# not human-chosen. Populate this once per board using scripts/maintenance/identify_board.py
 BOARD_REGISTRY: dict[str, int] = {
     "board0": 855203507,
     "board1": 1183344710,
