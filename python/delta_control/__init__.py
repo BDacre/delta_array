@@ -17,6 +17,12 @@ from .delta_array_env import (
     open_board,
 )
 from .transport import ProtoTransport
+from .calibration import (
+    apply_calibration,
+    calibration_path,
+    load_calibration,
+    load_calibration_file,
+)
 
 __all__ = [
     "ALL_AGENT_IDS",
@@ -25,9 +31,13 @@ __all__ = [
     "DeltaArrayAgent",
     "DeltaArrayEnv",
     "DiscoveryError",
+    "apply_calibration",
+    "calibration_path",
     "discover_board_id",
     "find_board_ports",
     "list_board_ports",
+    "load_calibration",
+    "load_calibration_file",
     "open_board",
     "MAX_JOINT_POS",
     "MAX_TRAJECTORY_ROWS",

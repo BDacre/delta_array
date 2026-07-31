@@ -109,6 +109,22 @@ typedef struct _SetPwmCommand {
     uint32_t duration_ms; /* auto-release after this; 0 => default, clamped to the move timeout */
 } SetPwmCommand;
 
+/* Runtime per-motor tuning. Overwrites the board's compiled defaults for the
+ addressed motor(s) without reflashing, so a single firmware image can carry
+ safe defaults while each physical board is calibrated from a host-side JSON
+ (keyed by board id) pushed after connecting. Fields are proto3 `optional`, so
+ a command may set only some of them; absent fields are left unchanged. */
+typedef struct _SetConfigCommand {
+    bool has_motor_index;
+    uint32_t motor_index; /* 0..11; absent => apply to all motors */
+    bool has_deadband;
+    float deadband; /* meters; |err| below this counts as settled */
+    bool has_bias_fwd;
+    int32_t bias_fwd; /* static feedforward PWM, FORWARD branch (0..255) */
+    bool has_bias_back;
+    int32_t bias_back; /* static feedforward PWM, BACKWARD branch (0..255) */
+} SetConfigCommand;
+
 typedef struct _JointFrame {
     pb_size_t which_kind;
     union {
@@ -117,6 +133,7 @@ typedef struct _JointFrame {
         ResetCommand reset;
         StopCommand stop;
         SetPwmCommand set_pwm;
+        SetConfigCommand set_config;
     } kind;
 } JointFrame;
 
@@ -159,6 +176,7 @@ extern "C" {
 
 
 
+
 #define CommandAck_status_ENUMTYPE AckStatus
 
 
@@ -178,6 +196,7 @@ extern "C" {
 #define ResetCommand_init_default                {0}
 #define StopCommand_init_default                 {0}
 #define SetPwmCommand_init_default               {0, 0, 0}
+#define SetConfigCommand_init_default            {false, 0, false, 0, false, 0, false, 0}
 #define JointFrame_init_default                  {0, {MoveCommand_init_default}}
 #define CommandAck_init_default                  {_AckStatus_MIN}
 #define DeltaMessage_init_default                {0, 0, {StatusFrame_init_default}}
@@ -195,6 +214,7 @@ extern "C" {
 #define ResetCommand_init_zero                   {0}
 #define StopCommand_init_zero                    {0}
 #define SetPwmCommand_init_zero                  {0, 0, 0}
+#define SetConfigCommand_init_zero               {false, 0, false, 0, false, 0, false, 0}
 #define JointFrame_init_zero                     {0, {MoveCommand_init_zero}}
 #define CommandAck_init_zero                     {_AckStatus_MIN}
 #define DeltaMessage_init_zero                   {0, 0, {StatusFrame_init_zero}}
@@ -219,11 +239,16 @@ extern "C" {
 #define SetPwmCommand_motor_index_tag            1
 #define SetPwmCommand_pwm_tag                    2
 #define SetPwmCommand_duration_ms_tag            3
+#define SetConfigCommand_motor_index_tag         1
+#define SetConfigCommand_deadband_tag            2
+#define SetConfigCommand_bias_fwd_tag            3
+#define SetConfigCommand_bias_back_tag           4
 #define JointFrame_move_tag                      1
 #define JointFrame_traj_tag                      2
 #define JointFrame_reset_tag                     3
 #define JointFrame_stop_tag                      4
 #define JointFrame_set_pwm_tag                   5
+#define JointFrame_set_config_tag                6
 #define CommandAck_status_tag                    1
 #define DeltaMessage_id_tag                      1
 #define DeltaMessage_status_tag                  2
@@ -320,12 +345,21 @@ X(a, STATIC,   SINGULAR, UINT32,   duration_ms,       3)
 #define SetPwmCommand_CALLBACK NULL
 #define SetPwmCommand_DEFAULT NULL
 
+#define SetConfigCommand_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, UINT32,   motor_index,       1) \
+X(a, STATIC,   OPTIONAL, FLOAT,    deadband,          2) \
+X(a, STATIC,   OPTIONAL, SINT32,   bias_fwd,          3) \
+X(a, STATIC,   OPTIONAL, SINT32,   bias_back,         4)
+#define SetConfigCommand_CALLBACK NULL
+#define SetConfigCommand_DEFAULT NULL
+
 #define JointFrame_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,move,kind.move),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,traj,kind.traj),   2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,reset,kind.reset),   3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,stop,kind.stop),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (kind,set_pwm,kind.set_pwm),   5)
+X(a, STATIC,   ONEOF,    MESSAGE,  (kind,set_pwm,kind.set_pwm),   5) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (kind,set_config,kind.set_config),   6)
 #define JointFrame_CALLBACK NULL
 #define JointFrame_DEFAULT NULL
 #define JointFrame_kind_move_MSGTYPE MoveCommand
@@ -333,6 +367,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (kind,set_pwm,kind.set_pwm),   5)
 #define JointFrame_kind_reset_MSGTYPE ResetCommand
 #define JointFrame_kind_stop_MSGTYPE StopCommand
 #define JointFrame_kind_set_pwm_MSGTYPE SetPwmCommand
+#define JointFrame_kind_set_config_MSGTYPE SetConfigCommand
 
 #define CommandAck_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    status,            1)
@@ -364,6 +399,7 @@ extern const pb_msgdesc_t TrajectoryCommand_msg;
 extern const pb_msgdesc_t ResetCommand_msg;
 extern const pb_msgdesc_t StopCommand_msg;
 extern const pb_msgdesc_t SetPwmCommand_msg;
+extern const pb_msgdesc_t SetConfigCommand_msg;
 extern const pb_msgdesc_t JointFrame_msg;
 extern const pb_msgdesc_t CommandAck_msg;
 extern const pb_msgdesc_t DeltaMessage_msg;
@@ -383,6 +419,7 @@ extern const pb_msgdesc_t DeltaMessage_msg;
 #define ResetCommand_fields &ResetCommand_msg
 #define StopCommand_fields &StopCommand_msg
 #define SetPwmCommand_fields &SetPwmCommand_msg
+#define SetConfigCommand_fields &SetConfigCommand_msg
 #define JointFrame_fields &JointFrame_msg
 #define CommandAck_fields &CommandAck_msg
 #define DeltaMessage_fields &DeltaMessage_msg
@@ -400,6 +437,7 @@ extern const pb_msgdesc_t DeltaMessage_msg;
 #define PoseRequest_size                         0
 #define PoseResponse_size                        60
 #define ResetCommand_size                        0
+#define SetConfigCommand_size                    23
 #define SetPwmCommand_size                       18
 #define StatusFrame_size                         195
 #define StopCommand_size                         0

@@ -51,13 +51,26 @@ message SetPwmCommand {
     uint32 duration_ms = 3;   // auto-release after this; 0 => default, clamped to the move timeout
 }
 
+// Runtime per-motor tuning. Overwrites the board's compiled defaults for the
+// addressed motor(s) without reflashing, so a single firmware image can carry
+// safe defaults while each physical board is calibrated from a host-side JSON
+// (keyed by board id) pushed after connecting. Fields are proto3 `optional`, so
+// a command may set only some of them; absent fields are left unchanged.
+message SetConfigCommand {
+    optional uint32 motor_index = 1;  // 0..11; absent => apply to all motors
+    optional float  deadband    = 2;  // meters; |err| below this counts as settled
+    optional sint32 bias_fwd    = 3;  // static feedforward PWM, FORWARD branch (0..255)
+    optional sint32 bias_back   = 4;  // static feedforward PWM, BACKWARD branch (0..255)
+}
+
 message JointFrame {
     oneof kind {
-        MoveCommand       move    = 1;
-        TrajectoryCommand traj    = 2;
-        ResetCommand      reset   = 3;
-        StopCommand       stop    = 4;
-        SetPwmCommand     set_pwm = 5;
+        MoveCommand       move       = 1;
+        TrajectoryCommand traj       = 2;
+        ResetCommand      reset      = 3;
+        StopCommand       stop       = 4;
+        SetPwmCommand     set_pwm    = 5;
+        SetConfigCommand  set_config = 6;
     }
 }
 

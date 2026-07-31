@@ -57,6 +57,7 @@ BOARD_REGISTRY: dict[str, int] = {
     "board1": 1183344710,
     "board2": 2018580162,
     "board3": 1159118204,
+    "board4": 1632502456,
 }
 
 # Reverse lookup: chip id -> label. Rebuilt from BOARD_REGISTRY; unknown ids

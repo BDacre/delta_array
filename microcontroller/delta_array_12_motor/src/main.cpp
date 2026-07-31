@@ -165,16 +165,20 @@ bool runPidStep(){
   for(int i = 0; i < NUM_MOTORS; i++){
     joint_errors[i] = joint_positions[i] - new_joint_positions[i];
     float pid = KP * joint_errors[i] + KI * total_joint_errors[i] + KD * (joint_errors[i] - last_joint_errors[i]) / time_elapsed;
-    if(joint_errors[i] > POSITION_THRESHOLD){
-      int motor_speed = (int)(min(max(0.0, pid), 1.0) * PWM_MAX);
+    if(joint_errors[i] > deadband[i]){
+      // Static feedforward bias lifts the drive past breakaway so small errors
+      // don't stall below the friction floor; clamp the total to PWM_MAX.
+      int motor_speed = (int)(min(max(0.0, pid), 1.0) * PWM_MAX) + bias_back[i];
+      if (motor_speed > (int)PWM_MAX) motor_speed = (int)PWM_MAX;
       reached = false;
       motors[i]->setSpeed(motor_speed);
       motors[i]->run(BACKWARD);
       applied_pwm[i] = motor_speed;   // BACKWARD -> positive (matches sign convention)
       total_joint_errors[i] += joint_errors[i];
     }
-    else if(joint_errors[i] < -POSITION_THRESHOLD){
-      int motor_speed = (int)(min(max(-1.0, pid), 0.0) * -PWM_MAX);
+    else if(joint_errors[i] < -deadband[i]){
+      int motor_speed = (int)(min(max(-1.0, pid), 0.0) * -PWM_MAX) + bias_fwd[i];
+      if (motor_speed > (int)PWM_MAX) motor_speed = (int)PWM_MAX;
       reached = false;
       motors[i]->setSpeed(motor_speed);
       motors[i]->run(FORWARD);
@@ -450,6 +454,29 @@ static bool handleJoint(const JointFrame &joint){
       openloop_motor = idx;
       openloop_deadline = millis() + dur;
       ctrl_mode = CTRL_OPENLOOP;
+      sendAck(AckStatus_ACK_OK);
+      return true;
+    }
+    case JointFrame_set_config_tag: {
+      // Runtime per-motor tuning (deadband + static feedforward bias). Only the
+      // fields present in the message are applied (proto3 optional / has_*);
+      // absent fields keep their current value. motor_index absent => all motors.
+      // Does not touch the control mode, so it is safe to send while idle or
+      // between moves (e.g. pushing a board's calibration at startup).
+      const SetConfigCommand &cmd = joint.kind.set_config;
+      int lo = 0, hi = NUM_MOTORS - 1;
+      if (cmd.has_motor_index) {
+        if (cmd.motor_index >= (uint32_t)NUM_MOTORS) {
+          sendAck(AckStatus_ACK_VALIDATION_FAIL);
+          return false;
+        }
+        lo = hi = (int)cmd.motor_index;
+      }
+      for (int i = lo; i <= hi; i++) {
+        if (cmd.has_deadband && cmd.deadband >= 0.0f) deadband[i] = cmd.deadband;
+        if (cmd.has_bias_fwd)  bias_fwd[i]  = constrain(cmd.bias_fwd, 0, (int)PWM_MAX);
+        if (cmd.has_bias_back) bias_back[i] = constrain(cmd.bias_back, 0, (int)PWM_MAX);
+      }
       sendAck(AckStatus_ACK_OK);
       return true;
     }

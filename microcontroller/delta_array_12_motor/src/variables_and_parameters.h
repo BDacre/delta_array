@@ -56,6 +56,11 @@ extern uint32_t my_id;
 #define KI 0.1f
 #define KD 3.75f
 
+// Per-motor settle deadband default (m). Promoted to a runtime per-motor array
+// (deadband[]) so it can be tuned live via SetConfigCommand; every motor starts
+// at this value. 0.8 mm is the historical hand-tuned threshold.
+#define DEADBAND_DEFAULT 0.0008f
+
 #define ADC_TO_POSITION 0.00006f
 #define PWM_MAX 255.0f
 #define RESET_POSITION 0.05f
@@ -128,7 +133,7 @@ extern uint8_t endMarker;
 // CTRL_IDLE: motors released, no active target.
 // CTRL_HOLD: driving toward a single target (MoveCommand / ResetCommand).
 // CTRL_TRAJ: stepping through trajectory[] rows; advances to the next row
-//            once all joints settle within POSITION_THRESHOLD.
+//            once all joints settle within their per-motor deadband[].
 // CTRL_OPENLOOP: diagnostics only — one motor driven at a fixed PWM (PID bypassed),
 //            auto-released at openloop_deadline. Set by SetPwmCommand.
 enum ControlMode : uint8_t {
@@ -166,7 +171,16 @@ extern float time_elapsed;
 extern float joint_positions[NUM_MOTORS];
 extern float new_joint_positions[NUM_MOTORS];
 
-extern float POSITION_THRESHOLD;
+// Per-motor control tuning, seeded from the compiled defaults and overridable at
+// runtime via SetConfigCommand (host pushes a board's calibration JSON).
+//   deadband[i]  : |err| below this counts as settled (m)
+//   bias_fwd[i]  : static feedforward PWM added in the FORWARD branch (0..PWM_MAX)
+//   bias_back[i] : static feedforward PWM added in the BACKWARD branch (0..PWM_MAX)
+// The biases default to 0, so an uncalibrated board behaves exactly as before.
+extern float deadband[NUM_MOTORS];
+extern int   bias_fwd[NUM_MOTORS];
+extern int   bias_back[NUM_MOTORS];
+
 extern float joint_errors[NUM_MOTORS];
 extern float last_joint_errors[NUM_MOTORS];
 extern float total_joint_errors[NUM_MOTORS];

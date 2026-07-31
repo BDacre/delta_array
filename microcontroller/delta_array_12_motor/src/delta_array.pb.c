@@ -48,6 +48,9 @@ PB_BIND(StopCommand, StopCommand, AUTO)
 PB_BIND(SetPwmCommand, SetPwmCommand, AUTO)
 
 
+PB_BIND(SetConfigCommand, SetConfigCommand, AUTO)
+
+
 PB_BIND(JointFrame, JointFrame, 2)
 
 

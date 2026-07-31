@@ -84,7 +84,17 @@ float time_elapsed;
 float joint_positions[NUM_MOTORS] = {0.0};
 float new_joint_positions[NUM_MOTORS] = {0.0};
 
-float POSITION_THRESHOLD = 0.0008;
+// Per-motor tuning: deadband seeded from the compiled default; biases default to
+// 0 (no feedforward) so an uncalibrated board matches the previous behavior.
+// Overridden at runtime by SetConfigCommand.
+float deadband[NUM_MOTORS] = {
+    DEADBAND_DEFAULT, DEADBAND_DEFAULT, DEADBAND_DEFAULT, DEADBAND_DEFAULT,
+    DEADBAND_DEFAULT, DEADBAND_DEFAULT, DEADBAND_DEFAULT, DEADBAND_DEFAULT,
+    DEADBAND_DEFAULT, DEADBAND_DEFAULT, DEADBAND_DEFAULT, DEADBAND_DEFAULT,
+};
+int bias_fwd[NUM_MOTORS]  = {0};
+int bias_back[NUM_MOTORS] = {0};
+
 float joint_errors[NUM_MOTORS] = {0.0};
 float last_joint_errors[NUM_MOTORS] = {0.0};
 float total_joint_errors[NUM_MOTORS] = {0.0};
