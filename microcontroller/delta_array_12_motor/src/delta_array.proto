@@ -61,6 +61,10 @@ message SetConfigCommand {
     optional float  deadband    = 2;  // meters; |err| below this counts as settled
     optional sint32 bias_fwd    = 3;  // static feedforward PWM, FORWARD branch (0..255)
     optional sint32 bias_back   = 4;  // static feedforward PWM, BACKWARD branch (0..255)
+    // Board-global (ignores motor_index): when true, a joint that reaches its
+    // setpoint short-brakes instead of coasting (RELEASE), arresting the ~2-3 mm
+    // post-release overshoot. Default false = original coast-at-setpoint behavior.
+    optional bool   brake_at_setpoint = 5;
 }
 
 message JointFrame {

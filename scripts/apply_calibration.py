@@ -33,7 +33,7 @@ DEFAULT_PORT = None   # None auto-detects the board's port
 DEFAULT_BOARD = None  # None auto-discovers the single connected board
 
 
-def run(port, board, file, name):
+def run(port, board, file, name, brake=None):
     env, agent = open_board(port, board)
     board_id = env.active_ids[0]
     print(f"connected to board {board_id}")
@@ -69,6 +69,14 @@ def run(port, board, file, name):
         for i, m in enumerate(calib["motors"]):
             if m:
                 print(f"  motor {i:2d}: {m}")
+
+        # Optional board-global A/B: brake vs coast at setpoint. --brake / --no-brake
+        # sets it explicitly; omit to leave the firmware's current mode untouched.
+        if brake is None:
+            brake = calib.get("brake_at_setpoint")  # optional JSON default
+        if brake is not None:
+            agent.set_config(brake_at_setpoint=bool(brake))
+            print(f"brake_at_setpoint = {bool(brake)}")
     finally:
         agent.close()
 
@@ -84,8 +92,11 @@ def main():
                         "config/calibration/board_<name>.json (e.g. --name 4)")
     p.add_argument("--file", default=None,
                    help="explicit calibration JSON path (overrides --name)")
+    p.add_argument("--brake", default=None, action=argparse.BooleanOptionalAction,
+                   help="brake at setpoint (A/B): --brake to short-brake, "
+                        "--no-brake to coast; omit to leave the current mode")
     args = p.parse_args()
-    run(args.port, args.id, args.file, args.name)
+    run(args.port, args.id, args.file, args.name, brake=args.brake)
 
 
 if __name__ == "__main__":

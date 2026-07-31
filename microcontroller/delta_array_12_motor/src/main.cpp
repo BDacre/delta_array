@@ -14,6 +14,8 @@
 void readJointPositions();
 bool runPidStep();
 void releaseAllMotors();
+void brakeMotor(int i);
+void settleAllMotors();
 void resetPidState();
 void loadTrajectoryRow(int row);
 void recvWithStartEndMarkers();
@@ -124,7 +126,9 @@ void loop() {
 
   if (ctrl_mode == CTRL_HOLD) {
     if (reached || (millis() - target_start_ms) > MOVE_TIMEOUT_MS) {
-      releaseAllMotors();
+      // Brake to hold only when we actually settled; a timeout is a failed move,
+      // so release (coast) rather than clamp on an unreached target.
+      if (reached) settleAllMotors(); else releaseAllMotors();
       ctrl_mode = CTRL_IDLE;
     }
     return;
@@ -137,7 +141,7 @@ void loop() {
     if (traj_iter < traj_rows) {
       loadTrajectoryRow(traj_iter);
     } else {
-      releaseAllMotors();
+      if (reached) settleAllMotors(); else releaseAllMotors();
       ctrl_mode = CTRL_IDLE;
     }
   }
@@ -186,9 +190,15 @@ bool runPidStep(){
       total_joint_errors[i] += joint_errors[i];
     }
     else{
-      motors[i]->setSpeed(0);
-      motors[i]->run(RELEASE);
-      applied_pwm[i] = 0;
+      // Within deadband: this joint has arrived. Brake to arrest any residual
+      // coast/overshoot if the A/B flag is on, else release (coast) as before.
+      if (brake_at_setpoint) {
+        brakeMotor(i);
+      } else {
+        motors[i]->setSpeed(0);
+        motors[i]->run(RELEASE);
+        applied_pwm[i] = 0;
+      }
       total_joint_errors[i] = 0.0;
     }
     last_joint_errors[i] = joint_errors[i];
@@ -202,6 +212,26 @@ void releaseAllMotors(){
     motors[i]->setSpeed(0);
     motors[i]->run(RELEASE);
     applied_pwm[i] = 0;
+  }
+}
+
+// Short-brake one motor. The MotorShield V2 library's run(BRAKE) is a no-op, but
+// on the TB6612 a latched direction with PWM held low is short brake (outputs
+// shorted, back-EMF resisted) rather than coast. Both setSpeed(0) and run(FORWARD)
+// use only the public API. applied_pwm stays 0 (no supply drive).
+void brakeMotor(int i){
+  motors[i]->setSpeed(0);
+  motors[i]->run(FORWARD);   // direction latched + PWM low => TB6612 short brake
+  applied_pwm[i] = 0;
+}
+
+// Settle every motor at the end of a completed move: brake to hold if the A/B
+// flag is on, otherwise release (coast) as before.
+void settleAllMotors(){
+  if (brake_at_setpoint) {
+    for(int i = 0; i < NUM_MOTORS; i++) brakeMotor(i);
+  } else {
+    releaseAllMotors();
   }
 }
 
@@ -464,6 +494,9 @@ static bool handleJoint(const JointFrame &joint){
       // Does not touch the control mode, so it is safe to send while idle or
       // between moves (e.g. pushing a board's calibration at startup).
       const SetConfigCommand &cmd = joint.kind.set_config;
+      // brake_at_setpoint is a board-global mode, not per-motor: apply it
+      // regardless of motor_index whenever the field is present.
+      if (cmd.has_brake_at_setpoint) brake_at_setpoint = cmd.brake_at_setpoint;
       int lo = 0, hi = NUM_MOTORS - 1;
       if (cmd.has_motor_index) {
         if (cmd.motor_index >= (uint32_t)NUM_MOTORS) {

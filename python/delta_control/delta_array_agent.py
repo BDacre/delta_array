@@ -138,13 +138,17 @@ class DeltaArrayAgent:
         self._send_command(msg)
 
     def set_config(self, motor_index=None, *, deadband=None,
-                   bias_fwd=None, bias_back=None):
+                   bias_fwd=None, bias_back=None, brake_at_setpoint=None):
         # Runtime per-motor tuning. Overwrites the board's compiled defaults for
         # one motor (motor_index) or all of them (motor_index=None) without
         # reflashing. Only the fields passed are applied on the firmware (proto3
         # optional / has_*); omitted fields keep their current value. Used to push
         # a board's calibration (see calibration.apply_calibration) at startup and
         # for live tuning. Follows the ACK-or-raise contract of _send_command.
+        #
+        # brake_at_setpoint is board-global (it ignores motor_index): when True a
+        # settled joint short-brakes instead of coasting, killing the post-release
+        # overshoot. Send it once (no motor_index needed) to flip the A/B mode.
         if motor_index is not None:
             assert 0 <= motor_index < NUM_MOTORS, (
                 f"motor_index must be 0..{NUM_MOTORS - 1}, got {motor_index}"
@@ -155,9 +159,10 @@ class DeltaArrayAgent:
             assert 0 <= bias_fwd <= 255, f"bias_fwd must be 0..255, got {bias_fwd}"
         if bias_back is not None:
             assert 0 <= bias_back <= 255, f"bias_back must be 0..255, got {bias_back}"
-        if deadband is None and bias_fwd is None and bias_back is None:
+        if (deadband is None and bias_fwd is None and bias_back is None
+                and brake_at_setpoint is None):
             raise ValueError("set_config needs at least one of "
-                             "deadband/bias_fwd/bias_back")
+                             "deadband/bias_fwd/bias_back/brake_at_setpoint")
         msg = self._envelope()
         cfg = msg.joint.set_config
         if motor_index is not None:
@@ -168,6 +173,8 @@ class DeltaArrayAgent:
             cfg.bias_fwd = int(bias_fwd)
         if bias_back is not None:
             cfg.bias_back = int(bias_back)
+        if brake_at_setpoint is not None:
+            cfg.brake_at_setpoint = bool(brake_at_setpoint)
         self._send_command(msg)
 
     def get_telemetry(self):

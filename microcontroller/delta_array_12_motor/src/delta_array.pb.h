@@ -123,6 +123,11 @@ typedef struct _SetConfigCommand {
     int32_t bias_fwd; /* static feedforward PWM, FORWARD branch (0..255) */
     bool has_bias_back;
     int32_t bias_back; /* static feedforward PWM, BACKWARD branch (0..255) */
+    /* Board-global (ignores motor_index): when true, a joint that reaches its
+ setpoint short-brakes instead of coasting (RELEASE), arresting the ~2-3 mm
+ post-release overshoot. Default false = original coast-at-setpoint behavior. */
+    bool has_brake_at_setpoint;
+    bool brake_at_setpoint;
 } SetConfigCommand;
 
 typedef struct _JointFrame {
@@ -196,7 +201,7 @@ extern "C" {
 #define ResetCommand_init_default                {0}
 #define StopCommand_init_default                 {0}
 #define SetPwmCommand_init_default               {0, 0, 0}
-#define SetConfigCommand_init_default            {false, 0, false, 0, false, 0, false, 0}
+#define SetConfigCommand_init_default            {false, 0, false, 0, false, 0, false, 0, false, 0}
 #define JointFrame_init_default                  {0, {MoveCommand_init_default}}
 #define CommandAck_init_default                  {_AckStatus_MIN}
 #define DeltaMessage_init_default                {0, 0, {StatusFrame_init_default}}
@@ -214,7 +219,7 @@ extern "C" {
 #define ResetCommand_init_zero                   {0}
 #define StopCommand_init_zero                    {0}
 #define SetPwmCommand_init_zero                  {0, 0, 0}
-#define SetConfigCommand_init_zero               {false, 0, false, 0, false, 0, false, 0}
+#define SetConfigCommand_init_zero               {false, 0, false, 0, false, 0, false, 0, false, 0}
 #define JointFrame_init_zero                     {0, {MoveCommand_init_zero}}
 #define CommandAck_init_zero                     {_AckStatus_MIN}
 #define DeltaMessage_init_zero                   {0, 0, {StatusFrame_init_zero}}
@@ -243,6 +248,7 @@ extern "C" {
 #define SetConfigCommand_deadband_tag            2
 #define SetConfigCommand_bias_fwd_tag            3
 #define SetConfigCommand_bias_back_tag           4
+#define SetConfigCommand_brake_at_setpoint_tag   5
 #define JointFrame_move_tag                      1
 #define JointFrame_traj_tag                      2
 #define JointFrame_reset_tag                     3
@@ -349,7 +355,8 @@ X(a, STATIC,   SINGULAR, UINT32,   duration_ms,       3)
 X(a, STATIC,   OPTIONAL, UINT32,   motor_index,       1) \
 X(a, STATIC,   OPTIONAL, FLOAT,    deadband,          2) \
 X(a, STATIC,   OPTIONAL, SINT32,   bias_fwd,          3) \
-X(a, STATIC,   OPTIONAL, SINT32,   bias_back,         4)
+X(a, STATIC,   OPTIONAL, SINT32,   bias_back,         4) \
+X(a, STATIC,   OPTIONAL, BOOL,     brake_at_setpoint,   5)
 #define SetConfigCommand_CALLBACK NULL
 #define SetConfigCommand_DEFAULT NULL
 
@@ -437,7 +444,7 @@ extern const pb_msgdesc_t DeltaMessage_msg;
 #define PoseRequest_size                         0
 #define PoseResponse_size                        60
 #define ResetCommand_size                        0
-#define SetConfigCommand_size                    23
+#define SetConfigCommand_size                    25
 #define SetPwmCommand_size                       18
 #define StatusFrame_size                         195
 #define StopCommand_size                         0

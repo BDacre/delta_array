@@ -95,6 +95,10 @@ float deadband[NUM_MOTORS] = {
 int bias_fwd[NUM_MOTORS]  = {0};
 int bias_back[NUM_MOTORS] = {0};
 
+// A/B: off by default, so flashing preserves the original coast-at-setpoint
+// behavior until the host pushes SetConfigCommand.brake_at_setpoint = true.
+bool brake_at_setpoint = false;
+
 float joint_errors[NUM_MOTORS] = {0.0};
 float last_joint_errors[NUM_MOTORS] = {0.0};
 float total_joint_errors[NUM_MOTORS] = {0.0};

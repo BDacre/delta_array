@@ -181,6 +181,12 @@ extern float deadband[NUM_MOTORS];
 extern int   bias_fwd[NUM_MOTORS];
 extern int   bias_back[NUM_MOTORS];
 
+// Board-global A/B flag (SetConfigCommand.brake_at_setpoint). When true, a joint
+// that settles within its deadband short-brakes (TB6612: direction latched, PWM
+// held low) instead of RELEASEing (coast). Braking arrests the ~2-3 mm overshoot
+// that coasting leaves after the drive cuts. Default false = original behavior.
+extern bool brake_at_setpoint;
+
 extern float joint_errors[NUM_MOTORS];
 extern float last_joint_errors[NUM_MOTORS];
 extern float total_joint_errors[NUM_MOTORS];
