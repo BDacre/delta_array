@@ -114,8 +114,49 @@ def _fmt_stats(vals):
             f"sd {sd:.1f}  values {found}{miss}")
 
 
+def print_json_seed(breakaway, motors, board_id, bias_margin, deadband=0):
+    """Print a board_<name>.json-ready block seeding bias from the breakaway means.
+
+    Rule: bias = max(0, round(mean_breakaway - bias_margin)), routed by direction
+    to match the firmware sign convention -- +dir (BACKWARD) mean -> bias_back,
+    -dir (FORWARD) mean -> bias_fwd. `bias_margin` seeds the feedforward just BELOW
+    the measured static breakaway so bias alone doesn't sit at the friction
+    threshold (which risks creep/lurch); the PID's KP*err term supplies the last
+    bit to break free. The margin is a hand-picked seed, not a derived constant --
+    it's within the sweep's own resolution (step 5, sd ~2-4) -- so the deadband
+    sweep + staircase A/B are what actually confirm it. Motors with no detected
+    breakaway get bias 0 (no feedforward). deadband is a placeholder: 0 would stop
+    the joint from ever settling, so set a real value (e.g. 0.0008) or run
+    sweep_deadband.py before applying this.
+    """
+    def seed(m, sign):
+        vals = [abs(v) for v in breakaway[(m, sign)] if v is not None]
+        if not vals:
+            return 0
+        return max(0, round(sum(vals) / len(vals) - bias_margin))
+
+    print(f"\nboard JSON seed (bias = mean - {bias_margin}; deadband placeholder "
+          f"= {deadband} -- set a real deadband before applying):")
+    if len(motors) != NUM_MOTORS:
+        print(f"  NOTE: only motors {motors} measured; a full calibration needs "
+              f"all {NUM_MOTORS}.")
+    print("{")
+    print(f'    "board_id": {board_id},')
+    print(f'    "note": "bias seeded from characterize_breakaway (mean - '
+          f'{bias_margin}); deadband is a placeholder",')
+    print('    "motors": [')
+    for i, m in enumerate(motors):
+        # +dir (BACKWARD) -> bias_back ; -dir (FORWARD) -> bias_fwd
+        back, fwd = seed(m, +1), seed(m, -1)
+        comma = "," if i < len(motors) - 1 else ""
+        print(f'        {{"deadband": {deadband}, "bias_back": {back}, '
+              f'"bias_fwd": {fwd}}}{comma}')
+    print("    ]")
+    print("}")
+
+
 def run(port, board, motors, trials, pwm_start, pwm_max, pwm_step, pulse_ms,
-        motion_threshold, baseline, out, outdir, show_plot=True):
+        motion_threshold, baseline, bias_margin, out, outdir, show_plot=True):
     out_path = out or build_output_path(outdir, motors)
 
     env, agent = open_board(port, board)
@@ -163,6 +204,8 @@ def run(port, board, motors, trials, pwm_start, pwm_max, pwm_step, pulse_ms,
     for motor in motors:
         print(f"  motor {motor:2d} +dir: {_fmt_stats(breakaway[(motor, +1)])}")
         print(f"  motor {motor:2d} -dir: {_fmt_stats(breakaway[(motor, -1)])}")
+
+    print_json_seed(breakaway, motors, env.active_ids[0], bias_margin)
 
     if show_plot:
         try:
@@ -262,6 +305,11 @@ def main():
     p.add_argument("--pulse-ms", type=int, default=150, help="open-loop pulse duration (ms)")
     p.add_argument("--motion-threshold", type=float, default=1.2e-4,
                    help="displacement (m) counted as motion (default 0.12mm ~2 ADC counts)")
+    p.add_argument("--bias-margin", type=int, default=3,
+                   help="seed bias = mean_breakaway - this, so feedforward sits just "
+                        "below the static-friction threshold (PID's KP*err tops it "
+                        "off). Hand-picked seed, refined later by the deadband/"
+                        "staircase A/B; within the sweep's own resolution. Default 3.")
     p.add_argument("--baseline", type=float, default=0.05,
                    help="hold position for the other 11 motors (m)")
     p.add_argument("--outdir", default=DEFAULT_OUTDIR,
@@ -283,7 +331,7 @@ def main():
 
     run(args.port, args.id, motors, args.trials, args.pwm_start, args.pwm_max,
         args.pwm_step, args.pulse_ms, args.motion_threshold, args.baseline,
-        args.out, args.outdir, show_plot=args.plot)
+        args.bias_margin, args.out, args.outdir, show_plot=args.plot)
 
 
 if __name__ == "__main__":

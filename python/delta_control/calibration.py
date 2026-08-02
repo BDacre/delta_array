@@ -30,6 +30,7 @@ Typical use::
         apply_calibration(agent, calib)
 """
 
+import glob
 import json
 import os
 
@@ -50,20 +51,54 @@ def calibration_path(board_id, calib_dir=None):
 def load_calibration(board_id, calib_dir=None):
     """Load and validate the calibration for a board id.
 
-    Returns the parsed dict, or None if no file exists for that board (an
-    uncalibrated board is a normal, non-error case — it just runs on defaults).
-    Raises ValueError if a file exists but is malformed.
+    Resolves the file two ways, so it works regardless of how the file is named:
+      1. Exact filename match ``board_<chip id>.json`` (calibration_path).
+      2. Fallback: scan the directory for any ``board_*.json`` whose ``board_id``
+         field equals this board -- files are usually named by a human label
+         (board_3.json), not the large chip id, so the exact match rarely hits.
+
+    Returns the parsed dict, or None if no file matches (an uncalibrated board is
+    a normal, non-error case — it just runs on defaults). Raises ValueError if the
+    exact-name file's board_id contradicts the request, or if more than one file
+    claims this board_id.
     """
+    calib_dir = calib_dir or DEFAULT_CALIBRATION_DIR
     path = calibration_path(board_id, calib_dir)
-    if not os.path.exists(path):
+    if os.path.exists(path):
+        calib = load_calibration_file(path)
+        cfg_id = calib.get("board_id")
+        if cfg_id is not None and cfg_id != board_id:
+            raise ValueError(
+                f"{path}: board_id {cfg_id} does not match requested board {board_id}"
+            )
+        return calib
+    return _find_by_board_id(board_id, calib_dir)
+
+
+def _find_by_board_id(board_id, calib_dir):
+    """Scan calib_dir for a board_*.json whose ``board_id`` field matches.
+
+    Filename-agnostic lookup. Files that don't parse/validate can't be the match
+    (their id is unreadable), so they're skipped rather than aborting the scan.
+    Returns the parsed dict, None if nothing matches, or raises if two files claim
+    the same board_id (an ambiguity the caller must resolve).
+    """
+    matches = []
+    for p in sorted(glob.glob(os.path.join(calib_dir, "board_*.json"))):
+        try:
+            calib = load_calibration_file(p)
+        except (ValueError, OSError):
+            continue
+        if calib.get("board_id") == board_id:
+            matches.append((p, calib))
+    if not matches:
         return None
-    calib = load_calibration_file(path)
-    cfg_id = calib.get("board_id")
-    if cfg_id is not None and cfg_id != board_id:
+    if len(matches) > 1:
         raise ValueError(
-            f"{path}: board_id {cfg_id} does not match requested board {board_id}"
+            f"multiple calibration files claim board_id {board_id}: "
+            f"{[p for p, _ in matches]}"
         )
-    return calib
+    return matches[0][1]
 
 
 def load_calibration_file(path):
