@@ -1,6 +1,7 @@
 {
     "board_id": null,
     "note": "TEMPLATE. Copy to board_<id>.json and set board_id to the target board's chip id. bias_back/bias_fwd seeded from characterize_breakaway (5-trial mean minus ~3 counts); deadband left at the firmware default (0.8mm) for the bias-first test. Retune once tested.",
+    "brake_at_setpoint": true,
     "motors": [
         {"deadband": 0.0008, "bias_back": 20, "bias_fwd": 29},
         {"deadband": 0.0008, "bias_back": 21, "bias_fwd": 25},

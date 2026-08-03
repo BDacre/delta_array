@@ -64,19 +64,26 @@ def run(port, board, file, name, brake=None):
         if cfg_id is not None:
             print(f"  calibration board_id: {cfg_id}")
 
+        # apply_calibration pushes the per-motor config AND the optional
+        # top-level brake_at_setpoint from the JSON.
         n = apply_calibration(agent, calib)
         print(f"applied calibration to {n} motor(s):")
         for i, m in enumerate(calib["motors"]):
             if m:
                 print(f"  motor {i:2d}: {m}")
 
-        # Optional board-global A/B: brake vs coast at setpoint. --brake / --no-brake
-        # sets it explicitly; omit to leave the firmware's current mode untouched.
-        if brake is None:
-            brake = calib.get("brake_at_setpoint")  # optional JSON default
+        # Optional board-global A/B: brake vs coast at setpoint. An explicit
+        # --brake / --no-brake overrides whatever the JSON set; omit to keep the
+        # JSON's value (or the firmware default if the JSON is silent).
         if brake is not None:
             agent.set_config(brake_at_setpoint=bool(brake))
-            print(f"brake_at_setpoint = {bool(brake)}")
+            print(f"brake_at_setpoint override -> {bool(brake)}")
+        else:
+            eff = calib.get("brake_at_setpoint")
+            if eff is None:
+                print("brake_at_setpoint not in calib; left at firmware default")
+            else:
+                print(f"brake_at_setpoint = {bool(eff)} (from calib)")
     finally:
         agent.close()
 

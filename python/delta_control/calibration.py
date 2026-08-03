@@ -12,6 +12,7 @@ File format (``config/calibration/board_<id>.json``)::
     {
         "board_id": 855203507,
         "note": "seeded from characterize_breakaway 2026-07-31",
+        "brake_at_setpoint": true,
         "motors": [
             {"deadband": 0.0008, "bias_fwd": 29, "bias_back": 20},
             ...   # exactly 12 entries, motor 0..11
@@ -21,6 +22,11 @@ File format (``config/calibration/board_<id>.json``)::
 Each motor entry may set any subset of ``deadband`` / ``bias_fwd`` /
 ``bias_back``; omitted keys leave that motor's current firmware value unchanged.
 An empty ``{}`` entry skips the motor entirely.
+
+``brake_at_setpoint`` (optional, top-level, board-global) selects the settle
+behaviour: ``true`` short-brakes a joint once it reaches its deadband (kills
+post-release coast/overshoot), ``false`` coasts. Omitted -> the board keeps its
+current mode (firmware default is coast). Applied by ``apply_calibration``.
 
 Typical use::
 
@@ -122,6 +128,11 @@ def _validate(calib, path):
             f"got {type(motors).__name__} of len "
             f"{len(motors) if isinstance(motors, list) else 'n/a'}"
         )
+    brake = calib.get("brake_at_setpoint")
+    if brake is not None and not isinstance(brake, bool):
+        raise ValueError(
+            f"{path}: 'brake_at_setpoint' must be true or false, got {brake!r}"
+        )
     for i, m in enumerate(motors):
         if not isinstance(m, dict):
             raise ValueError(f"{path}: motor {i} entry must be an object")
@@ -134,11 +145,16 @@ def _validate(calib, path):
 
 
 def apply_calibration(agent, calib):
-    """Push a loaded calibration to a board via per-motor set_config calls.
+    """Push a loaded calibration to a board via set_config calls.
 
     Sends one SetConfigCommand per motor that has at least one field, so only the
-    specified fields are overwritten. Returns the number of motors configured.
-    Each call is ACK-or-raise (CommandError) so a dropped frame is not silent.
+    specified fields are overwritten. If the calibration carries the optional
+    board-global ``brake_at_setpoint`` flag, it is applied too (after the
+    per-motor config) so a single JSON fully provisions the board -- every loader
+    that goes through this function honours the flag, not just the CLI.
+    Returns the number of motors configured (the brake flag is board-global and
+    not counted). Each call is ACK-or-raise (CommandError) so a dropped frame is
+    not silent.
     """
     motors = calib["motors"]
     if len(motors) != NUM_MOTORS:
@@ -152,4 +168,7 @@ def apply_calibration(agent, calib):
             continue
         agent.set_config(i, **fields)
         configured += 1
+    brake = calib.get("brake_at_setpoint")
+    if brake is not None:
+        agent.set_config(brake_at_setpoint=bool(brake))
     return configured
