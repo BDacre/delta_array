@@ -122,13 +122,35 @@ void loop() {
     return;
   }
 
+  // CTRL_HOLD_MONITOR: a move has settled and the board is holding it. The PID is
+  // NOT running (motors braked/released, no integral windup at rest); we only
+  // watch for drift. If any joint creeps past REARM_HYSTERESIS * its deadband,
+  // re-engage the PID from a clean state to drive it back to the same setpoint.
+  if (ctrl_mode == CTRL_HOLD_MONITOR) {
+    readJointPositions();
+    for (int i = 0; i < NUM_MOTORS; i++) {
+      float thr = REARM_HYSTERESIS * deadband[i];
+      float e = joint_positions[i] - new_joint_positions[i];
+      if (e > thr || e < -thr) {
+        resetPidState();        // clears integral/derivative and restarts the move timer
+        ctrl_mode = CTRL_HOLD;  // re-drive to the held setpoint
+        break;
+      }
+    }
+    return;
+  }
+
   bool reached = runPidStep();
 
   if (ctrl_mode == CTRL_HOLD) {
-    if (reached || (millis() - target_start_ms) > MOVE_TIMEOUT_MS) {
-      // Brake to hold only when we actually settled; a timeout is a failed move,
-      // so release (coast) rather than clamp on an unreached target.
-      if (reached) settleAllMotors(); else releaseAllMotors();
+    if (reached) {
+      // Settled: brake/release to hold, then monitor for drift and re-arm rather
+      // than going fully idle, so post-arrival creep is corrected back to target.
+      settleAllMotors();
+      ctrl_mode = CTRL_HOLD_MONITOR;
+    } else if ((millis() - target_start_ms) > MOVE_TIMEOUT_MS) {
+      // Timeout is a failed move: release (coast) and give up (no re-arm).
+      releaseAllMotors();
       ctrl_mode = CTRL_IDLE;
     }
     return;
@@ -370,7 +392,10 @@ static bool handleStatus(const StatusFrame &status){
     }
     case StatusFrame_done_req_tag: {
       response.payload.status.which_kind = StatusFrame_done_resp_tag;
-      response.payload.status.kind.done_resp.done = (ctrl_mode == CTRL_IDLE);
+      // "Done" once the commanded move has settled: fully idle, or holding it in
+      // the re-arm monitor. A transient re-drive (CTRL_HOLD) reports not-done.
+      response.payload.status.kind.done_resp.done =
+          (ctrl_mode == CTRL_IDLE || ctrl_mode == CTRL_HOLD_MONITOR);
       sendFramedResponse(response);
       return false;
     }
@@ -384,9 +409,14 @@ static bool handleStatus(const StatusFrame &status){
       return false;
     }
     case StatusFrame_telemetry_req_tag: {
-      // Diagnostics: report per-motor position, PID error, and last applied PWM.
-      // Read-only, safe in any control mode. error/pwm reflect the most recent
-      // control step (updated by runPidStep / the open-loop drive).
+      // Diagnostics: report per-motor position, live position error, and last
+      // applied PWM. Read-only, safe in any control mode. position and error are
+      // recomputed here from a fresh ADC read, so error is the TRUE current
+      // offset from the setpoint -- not runPidStep's stale joint_errors[], which
+      // freezes at its last sub-deadband value once a move reaches and the board
+      // goes CTRL_IDLE (the PID stops running). That freeze made a joint that
+      // drifted after arrival report ~0 error while sitting mm off target. pwm is
+      // still the last commanded drive (0 once braked/released at settle).
       readJointPositions();
       response.payload.status.which_kind = StatusFrame_telemetry_resp_tag;
       TelemetryResponse &t = response.payload.status.kind.telemetry_resp;
@@ -395,7 +425,7 @@ static bool handleStatus(const StatusFrame &status){
       t.pwm_count = NUM_MOTORS;
       for (int i = 0; i < NUM_MOTORS; i++){
         t.position[i] = joint_positions[i];
-        t.error[i] = joint_errors[i];
+        t.error[i] = joint_positions[i] - new_joint_positions[i];
         t.pwm[i] = applied_pwm[i];
       }
       sendFramedResponse(response);

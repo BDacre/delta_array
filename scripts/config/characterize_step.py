@@ -194,7 +194,7 @@ def main():
                    help="board label (BOARD_REGISTRY) or raw id; omit to auto-discover")
     p.add_argument("--motor", type=int, required=True, help=f"motor index 0..{NUM_MOTORS - 1}")
     p.add_argument("--from", dest="start", type=float, default=0.045, help="start position (m)")
-    p.add_argument("--to", dest="target", type=float, default=0.085, help="step target (m)")
+    p.add_argument("--to", dest="target", type=float, default=0.055, help="step target (m)")
     p.add_argument("--baseline", type=float, default=0.045, help="hold position for the other 11 motors (m)")
     p.add_argument("--duration", type=float, default=2.0, help="capture window after the step (s)")
     p.add_argument("--outdir", default=DEFAULT_OUTDIR,

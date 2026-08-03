@@ -33,6 +33,7 @@ Examples:
     python characterize_tracking_error.py --pattern circle --amp 0.008
     python characterize_tracking_error.py --id board2 --delta 1 --pattern x
     python characterize_tracking_error.py --no-calibration    # measure on firmware defaults
+    python characterize_tracking_error.py --repeat 8          # settle repeatability at each target
 """
 
 import argparse
@@ -68,6 +69,9 @@ DEFAULT_N = 15           # waypoints per axis / around the pattern
 DEFAULT_SETTLE_S = 0.8   # s, PID settle before sampling
 DEFAULT_SAMPLES = 5      # telemetry reads averaged per waypoint
 MIN_AMP = 0.001          # m, give up shrinking below this
+DEFAULT_REPEAT = 1       # re-approaches per target; >1 switches to repeatability mode
+REPEAT_RETRACT_M = 0.006 # m, joint retract offset for the 'alt' approach direction
+REPEAT_TEST_NAME = "tracking_repeat"
 
 
 def home_joints():
@@ -131,23 +135,30 @@ def fit_amplitude(pattern, amp, z, center, n):
     )
 
 
+def _command_tested_delta(agent, delta_index, joints3):
+    """Command one delta's 3 joints; hold the other three deltas at home."""
+    s = delta_index * MOTORS_PER_DELTA
+    vec = np.tile(home_joints(), NUM_MOTORS // MOTORS_PER_DELTA)
+    vec[s:s + MOTORS_PER_DELTA] = np.asarray(joints3, dtype=float)
+    agent.move_joint_position(vec.tolist())
+
+
 def measure_waypoint(agent, delta_index, target, settle_s, samples):
     """Command one tip target on `delta_index`, settle, and measure the result.
 
     Returns a dict with the target, the measured (settled, averaged) actuator
-    heights, the FK-reconstructed actual tip, the errors, and the firmware's own
-    PID error / applied PWM for the three motors.
+    heights, the spread of the static reads (`measured_j_std`), the
+    FK-reconstructed actual tip, the errors, and the firmware's own PID error /
+    applied PWM for the three motors.
     """
     s = delta_index * MOTORS_PER_DELTA
     target_j = np.asarray(delta.ik(target), dtype=float)
 
     # Hold the other three deltas at home; only the tested delta tracks the path.
-    vec = np.tile(home_joints(), NUM_MOTORS // MOTORS_PER_DELTA)
-    vec[s:s + MOTORS_PER_DELTA] = target_j
-    agent.move_joint_position(vec.tolist())
+    _command_tested_delta(agent, delta_index, target_j)
     time.sleep(settle_s)
 
-    pos_acc = np.zeros(MOTORS_PER_DELTA)
+    pos_samps = []
     err_acc = np.zeros(MOTORS_PER_DELTA)
     pwm_acc = np.zeros(MOTORS_PER_DELTA)
     got = 0
@@ -155,17 +166,22 @@ def measure_waypoint(agent, delta_index, target, settle_s, samples):
         tel = agent.get_telemetry()
         if tel is None:
             continue
-        pos_acc += np.asarray(tel["position"][s:s + MOTORS_PER_DELTA])
+        pos_samps.append(np.asarray(tel["position"][s:s + MOTORS_PER_DELTA], dtype=float))
         err_acc += np.asarray(tel["error"][s:s + MOTORS_PER_DELTA])
         pwm_acc += np.asarray(tel["pwm"][s:s + MOTORS_PER_DELTA])
         got += 1
     if got == 0:
         # Telemetry unsupported/failing -> fall back to a plain pose read.
         measured_j = np.asarray(agent.get_joint_positions()[s:s + MOTORS_PER_DELTA])
+        measured_j_std = np.full(MOTORS_PER_DELTA, np.nan)
         pid_err = np.full(MOTORS_PER_DELTA, np.nan)
         pwm = np.full(MOTORS_PER_DELTA, np.nan)
     else:
-        measured_j = pos_acc / got
+        stack = np.array(pos_samps)
+        measured_j = stack.mean(axis=0)
+        # Spread across the static reads: sensor/comms noise at one settle point
+        # (0 for a single sample). Separates a noisy read from a stable offset.
+        measured_j_std = stack.std(axis=0)
         pid_err = err_acc / got
         pwm = pwm_acc / got
 
@@ -177,6 +193,7 @@ def measure_waypoint(agent, delta_index, target, settle_s, samples):
         "measured_ee": measured_ee,
         "target_j": target_j,
         "measured_j": measured_j,
+        "measured_j_std": measured_j_std,
         "joint_err": measured_j - target_j,
         "pid_err": pid_err,
         "pwm": pwm,
@@ -185,10 +202,10 @@ def measure_waypoint(agent, delta_index, target, settle_s, samples):
     }
 
 
-def build_output_path(outdir, board_id, delta_index, pattern):
+def build_output_path(outdir, board_id, delta_index, pattern, test_name=TEST_NAME):
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     tag = f"board{board_id}_delta{delta_index}_{pattern}"
-    return os.path.join(outdir, TEST_NAME, f"{TEST_NAME}_{tag}_{stamp}.csv")
+    return os.path.join(outdir, test_name, f"{test_name}_{tag}_{stamp}.csv")
 
 
 def run(port, board, delta_index, pattern, amp, z, center, n, settle_s, samples,
@@ -329,6 +346,8 @@ def plot_tracking(results, pattern, board_id, delta_index, csv_path):
     ax.plot(ee_err[:, 0], "-o", ms=3, label="x err")
     ax.plot(ee_err[:, 1], "-o", ms=3, label="y err")
     ax.plot(ee_err[:, 2], "-o", ms=3, label="z err")
+    absolute_error = np.sqrt(np.sum(ee_err**2, axis=1))
+    ax.plot(absolute_error, "-o", ms=3, label="|err|")
     ax.axhline(0, color="0.6", lw=0.8)
     ax.set_xlabel("waypoint")
     ax.set_ylabel("tip error (mm)")
@@ -344,6 +363,230 @@ def plot_tracking(results, pattern, board_id, delta_index, csv_path):
     ax.set_xlabel("waypoint")
     ax.set_ylabel("joint error (mm)")
     ax.set_title("per-actuator tracking error (measured - target)")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best")
+
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    png_path = os.path.splitext(csv_path)[0] + ".png"
+    fig.savefig(png_path, dpi=120)
+    print(f"saved plot to {png_path}")
+    plt.show()
+
+
+def retract_pose(target_j, approach, trial):
+    """Joint pose to park at before (re)approaching `target_j` on a given trial.
+
+    'home' -> always the home pose, so every trial arrives from the same
+    direction (pure repeatability). 'alt' -> alternate a fixed offset below /
+    above the target each trial so the joint arrives from opposite directions,
+    which exposes backlash / direction-dependent hysteresis. Offsets are clipped
+    into the safe joint band so the retract itself never sits on a hard limit.
+    """
+    if approach == "home":
+        return home_joints()
+    sign = -1.0 if trial % 2 == 0 else 1.0
+    lo = MIN_JOINT_POS + BOUND_MARGIN
+    hi = MAX_JOINT_POS - BOUND_MARGIN
+    return np.clip(np.asarray(target_j) + sign * REPEAT_RETRACT_M, lo, hi)
+
+
+def run_repeat(port, board, delta_index, pattern, amp, z, center, n, settle_s,
+               samples, repeat, approach, calibrate, outdir, out, show_plot=True):
+    """Re-approach every target `repeat` times to measure settle repeatability.
+
+    Unlike the single sweep, each trial first retracts to a reference pose and
+    then re-approaches the target, so the trial-to-trial spread of where the
+    joint lands is a genuine measure of settle repeatability (not a static
+    reread). Each landing also carries its own within-trial static spread, so one
+    run separates real settle scatter (across-trial std >> within-trial std) from
+    telemetry/sensor noise (across ~ within).
+    """
+    amp, waypoints = fit_amplitude(pattern, amp, z, center, n)
+
+    env, agent = open_board(port, board)
+    board_id = env.active_ids[0]
+    print(f"opening {port}, using board id {board_id}, delta {delta_index}")
+    print(f"repeatability probe: pattern={pattern} amp={amp * 1e3:.2f} mm "
+          f"z={z:.4f} m waypoints={len(waypoints)} repeat={repeat} "
+          f"approach={approach} settle={settle_s}s samples={samples}")
+
+    rows = []
+    per_wp = []
+    try:
+        if calibrate:
+            calib = load_calibration(board_id)
+            if calib:
+                napplied = apply_calibration(agent, calib)
+                print(f"applied calibration to {napplied} motor(s)")
+            else:
+                print(f"no calibration file for board {board_id}; running on firmware defaults")
+        else:
+            print("skipping calibration (--no-calibration)")
+
+        print("homing...")
+        env.reset()
+        time.sleep(1.5)
+
+        for i, wp in enumerate(waypoints):
+            target_j = np.asarray(delta.ik(wp), dtype=float)
+            trials = []
+            for k in range(repeat):
+                # Retract to the reference pose, then measure_waypoint re-approaches
+                # the target -- so every trial is a fresh approach, not a reread.
+                _command_tested_delta(agent, delta_index, retract_pose(target_j, approach, k))
+                time.sleep(settle_s)
+                r = measure_waypoint(agent, delta_index, wp, settle_s, samples)
+                trials.append(r)
+                rows.append([
+                    i, k,
+                    *[f"{v:.6f}" for v in r["target_ee"]],
+                    *[f"{v:.6f}" for v in r["measured_ee"]],
+                    *[f"{v:.6f}" for v in r["target_j"]],
+                    *[f"{v:.6f}" for v in r["measured_j"]],
+                    *[f"{v:.6f}" for v in r["measured_j_std"]],
+                    *[f"{v:.6f}" for v in r["joint_err"]],
+                    *[f"{v:.6f}" for v in r["pid_err"]],
+                    f"{r['ee_err'][0]:.6f}", f"{r['ee_err'][1]:.6f}", f"{r['ee_err'][2]:.6f}",
+                    f"{r['horiz_err']:.6f}",
+                ])
+            landings = np.array([t["measured_j"] for t in trials])          # repeat x 3
+            horiz = np.array([t["horiz_err"] for t in trials])
+            across_std = landings.std(axis=0)                               # trial-to-trial
+            within_std = np.nanmean([t["measured_j_std"] for t in trials], axis=0)
+            per_wp.append({
+                "target_ee": np.asarray(wp, dtype=float),
+                "meas_ee": np.array([t["measured_ee"] for t in trials]),    # repeat x 3
+                "ee_err": np.array([t["ee_err"] for t in trials]),          # repeat x 3
+                "jerr": np.array([t["joint_err"] for t in trials]),         # repeat x 3
+                "horiz": horiz,
+                "across_std": across_std,
+                "within_std": within_std,
+            })
+            print(f"  wp {i:2d}  tgt=({wp[0] * 1e3:+6.2f},{wp[1] * 1e3:+6.2f}) mm  "
+                  f"horiz mean={horiz.mean() * 1e3:5.2f} max={horiz.max() * 1e3:5.2f} mm  "
+                  f"across-trial jstd={across_std.max() * 1e3:.3f} mm  "
+                  f"within-trial jstd={within_std.max() * 1e3:.3f} mm")
+    finally:
+        print("returning home, closing port")
+        try:
+            env.reset()
+            time.sleep(0.5)
+        finally:
+            agent.close()
+
+    across = np.array([w["across_std"].max() for w in per_wp]) * 1e3
+    within = np.array([w["within_std"].max() for w in per_wp]) * 1e3
+    print(f"\nrepeatability (per-waypoint worst motor, mm):")
+    print(f"  across-trial joint std: mean={across.mean():.3f}  max={across.max():.3f}")
+    print(f"  within-trial joint std: mean={within.mean():.3f}  max={within.max():.3f}")
+    print("  across >> within  -> real settle scatter (mechanical / encoder)")
+    print("  across ~= within  -> the offset is telemetry / sensor noise")
+
+    out_path = out or build_output_path(outdir, board_id, delta_index, pattern,
+                                        REPEAT_TEST_NAME)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow([f"# {REPEAT_TEST_NAME} board={board_id} delta={delta_index} "
+                    f"pattern={pattern} amp_m={amp} z_m={z} center={center} "
+                    f"repeat={repeat} approach={approach} settle_s={settle_s} "
+                    f"samples={samples} calibrated={calibrate}"])
+        w.writerow([
+            "wp", "trial",
+            "tgt_x", "tgt_y", "tgt_z",
+            "meas_x", "meas_y", "meas_z",
+            "tgt_j0", "tgt_j1", "tgt_j2",
+            "meas_j0", "meas_j1", "meas_j2",
+            "jstd0", "jstd1", "jstd2",          # within-trial static spread
+            "jerr0", "jerr1", "jerr2",
+            "pid_err0", "pid_err1", "pid_err2",
+            "ee_err_x", "ee_err_y", "ee_err_z",
+            "horiz_err",
+        ])
+        w.writerows(rows)
+    print(f"wrote {len(rows)} trials ({len(per_wp)} waypoints x {repeat}) to {out_path}")
+
+    if show_plot:
+        try:
+            plot_repeat(per_wp, pattern, board_id, delta_index, approach, out_path)
+        except Exception as e:
+            print(f"skipping plot ({e}); data is in {out_path}")
+
+
+def plot_repeat(per_wp, pattern, board_id, delta_index, approach, csv_path):
+    """Same four panels as the single sweep, but every trial is plotted as a
+    point so the per-waypoint spread (the settle repeatability) is visible."""
+    import matplotlib.pyplot as plt
+
+    idx = np.arange(len(per_wp))
+    tgt = np.array([w["target_ee"] for w in per_wp])
+    axis_colors = ["tab:blue", "tab:orange", "tab:green"]
+    fig, axes = plt.subplots(2, 2, figsize=(13, 9))
+    fig.suptitle(f"settle repeatability  board {board_id} delta {delta_index}  "
+                 f"pattern={pattern}  approach={approach}")
+
+    # (0,0) XY plane: commanded path + every measured trial point.
+    ax = axes[0, 0]
+    ax.plot(tgt[:, 0] * 1e3, tgt[:, 1] * 1e3, "-o", ms=4, color="tab:blue",
+            label="target", zorder=2)
+    for i, w in enumerate(per_wp):
+        me = w["meas_ee"] * 1e3
+        ax.plot(me[:, 0], me[:, 1], "o", ms=3, color="tab:red", alpha=0.5, zorder=3,
+                label="measured (FK)" if i == 0 else None)
+    ax.set_xlabel("x (mm)")
+    ax.set_ylabel("y (mm)")
+    ax.set_title("horizontal plane: commanded vs actual (all trials)")
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best")
+
+    # (0,1) horizontal error magnitude per waypoint, one point per trial.
+    ax = axes[0, 1]
+    for i, w in enumerate(per_wp):
+        h = w["horiz"] * 1e3
+        ax.plot(np.full_like(h, i), h, "o", ms=4, color="tab:purple", alpha=0.5,
+                zorder=2)
+    means = np.array([w["horiz"].mean() for w in per_wp]) * 1e3
+    ax.plot(idx, means, "-", color="0.4", lw=1, label=f"mean {means.mean():.2f} mm",
+            zorder=1)
+    ax.set_xlabel("waypoint")
+    ax.set_ylabel("horizontal error |xy| (mm)")
+    ax.set_title("horizontal error per waypoint (points = trials)")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best")
+
+    # (1,0) per-axis EE error, one point per trial, per-waypoint mean joined by a
+    # line so the trend is legible through the scatter.
+    ax = axes[1, 0]
+    ee_mean = np.array([w["ee_err"].mean(axis=0) for w in per_wp]) * 1e3   # nwp x 3
+    for c, (lbl, col) in enumerate([("x err", axis_colors[0]),
+                                    ("y err", axis_colors[1]),
+                                    ("z err", axis_colors[2])]):
+        for i, w in enumerate(per_wp):
+            e = w["ee_err"][:, c] * 1e3
+            ax.plot(np.full_like(e, i), e, "o", ms=3, color=col, alpha=0.4, zorder=2)
+        ax.plot(idx, ee_mean[:, c], "-", color=col, lw=1.2, label=lbl, zorder=3)
+    ax.axhline(0, color="0.6", lw=0.8)
+    ax.set_xlabel("waypoint")
+    ax.set_ylabel("tip error (mm)")
+    ax.set_title("per-axis tip error (measured - target); line = per-waypoint mean")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best")
+
+    # (1,1) per-motor joint error, one point per trial, per-waypoint mean line.
+    ax = axes[1, 1]
+    jerr_mean = np.array([w["jerr"].mean(axis=0) for w in per_wp]) * 1e3   # nwp x 3
+    for m in range(MOTORS_PER_DELTA):
+        for i, w in enumerate(per_wp):
+            j = w["jerr"][:, m] * 1e3
+            ax.plot(np.full_like(j, i), j, "o", ms=3, color=axis_colors[m], alpha=0.4,
+                    zorder=2)
+        ax.plot(idx, jerr_mean[:, m], "-", color=axis_colors[m], lw=1.2,
+                label=f"motor {delta_index * 3 + m}", zorder=3)
+    ax.axhline(0, color="0.6", lw=0.8)
+    ax.set_xlabel("waypoint")
+    ax.set_ylabel("joint error (mm)")
+    ax.set_title("per-actuator error (measured - target); line = per-waypoint mean")
     ax.grid(True, alpha=0.3)
     ax.legend(loc="best")
 
@@ -377,6 +620,12 @@ def main():
                    help="PID settle time before sampling each waypoint (s)")
     p.add_argument("--samples", type=int, default=DEFAULT_SAMPLES,
                    help="telemetry reads averaged per waypoint")
+    p.add_argument("--repeat", type=int, default=DEFAULT_REPEAT,
+                   help="re-approach each target this many times to measure settle "
+                        "repeatability (1 = single sweep, the default)")
+    p.add_argument("--approach", default="home", choices=["home", "alt"],
+                   help="repeat-mode retract between trials: 'home' (same approach "
+                        "each trial) or 'alt' (alternate below/above -> exposes backlash)")
     p.add_argument("--no-calibration", dest="calibrate", action="store_false",
                    help="do not push the board's calibration first (measure on defaults)")
     p.add_argument("--outdir", default=DEFAULT_OUTDIR,
@@ -390,10 +639,18 @@ def main():
         raise SystemExit(f"--delta must be 0..3, got {args.delta}")
     if args.n < 2:
         raise SystemExit(f"--n must be >= 2, got {args.n}")
+    if args.repeat < 1:
+        raise SystemExit(f"--repeat must be >= 1, got {args.repeat}")
 
-    run(args.port, args.id, args.delta, args.pattern, args.amp, args.z,
-        (args.cx, args.cy), args.n, args.settle, args.samples, args.calibrate,
-        args.outdir, args.out, show_plot=args.plot)
+    if args.repeat > 1:
+        run_repeat(args.port, args.id, args.delta, args.pattern, args.amp, args.z,
+                   (args.cx, args.cy), args.n, args.settle, args.samples,
+                   args.repeat, args.approach, args.calibrate, args.outdir, args.out,
+                   show_plot=args.plot)
+    else:
+        run(args.port, args.id, args.delta, args.pattern, args.amp, args.z,
+            (args.cx, args.cy), args.n, args.settle, args.samples, args.calibrate,
+            args.outdir, args.out, show_plot=args.plot)
 
 
 if __name__ == "__main__":

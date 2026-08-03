@@ -71,6 +71,16 @@ extern uint32_t my_id;
 // reset the timer on every advance.
 #define MOVE_TIMEOUT_MS 5000UL
 
+// Re-arm hold: after a CTRL_HOLD move settles (-> CTRL_HOLD_MONITOR) the motors
+// stay off and the PID stops (no windup at rest); the board only watches for
+// drift. If any joint creeps past REARM_HYSTERESIS * its deadband, the PID is
+// re-engaged from a clean integral to drive it back to the same setpoint --
+// correcting post-brake creep/backlash the way a continuous PID would, but
+// without holding the motors energized or accumulating integral while idle. The
+// factor keeps the trigger above the deadband so ordinary settle jitter (which
+// is what "settled" already tolerates) doesn't cause re-arm chatter.
+#define REARM_HYSTERESIS 2.0f
+
 // ---------------------------------------------------------
 // Serial buffer
 // ---------------------------------------------------------
@@ -136,11 +146,15 @@ extern uint8_t endMarker;
 //            once all joints settle within their per-motor deadband[].
 // CTRL_OPENLOOP: diagnostics only — one motor driven at a fixed PWM (PID bypassed),
 //            auto-released at openloop_deadline. Set by SetPwmCommand.
+// CTRL_HOLD_MONITOR: a CTRL_HOLD move has settled; motors braked/released and the
+//            PID is off, but the board watches for drift and re-arms (back to
+//            CTRL_HOLD) if a joint creeps past REARM_HYSTERESIS * deadband[].
 enum ControlMode : uint8_t {
   CTRL_IDLE = 0,
   CTRL_HOLD = 1,
   CTRL_TRAJ = 2,
   CTRL_OPENLOOP = 3,
+  CTRL_HOLD_MONITOR = 4,
 };
 
 extern ControlMode ctrl_mode;
