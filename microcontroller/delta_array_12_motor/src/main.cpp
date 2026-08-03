@@ -401,6 +401,26 @@ static bool handleStatus(const StatusFrame &status){
       sendFramedResponse(response);
       return false;
     }
+    case StatusFrame_config_req_tag: {
+      // Diagnostics: report the board's LIVE per-motor tuning (deadband/bias) and
+      // the board-global brake mode, so the host can verify what SetConfigCommand
+      // actually left in effect. Read-only, safe in any control mode. Config is
+      // RAM-only, so after a reboot this returns the compiled defaults until the
+      // host re-applies a calibration.
+      response.payload.status.which_kind = StatusFrame_config_resp_tag;
+      ConfigResponse &c = response.payload.status.kind.config_resp;
+      c.deadband_count = NUM_MOTORS;
+      c.bias_fwd_count = NUM_MOTORS;
+      c.bias_back_count = NUM_MOTORS;
+      for (int i = 0; i < NUM_MOTORS; i++){
+        c.deadband[i] = deadband[i];
+        c.bias_fwd[i] = bias_fwd[i];
+        c.bias_back[i] = bias_back[i];
+      }
+      c.brake_at_setpoint = brake_at_setpoint;
+      sendFramedResponse(response);
+      return false;
+    }
     default:
       return false;
   }

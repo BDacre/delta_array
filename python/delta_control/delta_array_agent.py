@@ -198,6 +198,32 @@ class DeltaArrayAgent:
             }
         return None
 
+    def get_config(self):
+        # Read back the board's LIVE tuning: per-motor deadband (m) and static
+        # feedforward bias (bias_fwd/bias_back, PWM counts), plus the board-global
+        # brake_at_setpoint mode. set_config is otherwise write-only, so this is
+        # the only way to verify what a board is actually running. Config is
+        # RAM-only on the firmware -- a board reverts to its compiled defaults
+        # after a power-cycle/reboot until apply_calibration is re-run, and this
+        # readback is what surfaces that drift. Returns a dict of the four fields
+        # (three 12-lists + a bool), or None if no valid reply arrived.
+        msg = self._envelope()
+        msg.status.config_req.SetInParent()
+        reply = self._send(msg)
+        if (
+            reply is not None
+            and reply.HasField("status")
+            and reply.status.HasField("config_resp")
+        ):
+            c = reply.status.config_resp
+            return {
+                "deadband": list(c.deadband),
+                "bias_fwd": list(c.bias_fwd),
+                "bias_back": list(c.bias_back),
+                "brake_at_setpoint": bool(c.brake_at_setpoint),
+            }
+        return None
+
     def reset(self):
         msg = self._envelope()
         msg.joint.reset.SetInParent()

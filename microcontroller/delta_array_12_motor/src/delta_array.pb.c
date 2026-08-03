@@ -30,6 +30,12 @@ PB_BIND(TelemetryRequest, TelemetryRequest, AUTO)
 PB_BIND(TelemetryResponse, TelemetryResponse, AUTO)
 
 
+PB_BIND(ConfigRequest, ConfigRequest, AUTO)
+
+
+PB_BIND(ConfigResponse, ConfigResponse, AUTO)
+
+
 PB_BIND(StatusFrame, StatusFrame, AUTO)
 
 

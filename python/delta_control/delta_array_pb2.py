@@ -24,15 +24,15 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11\x64\x65lta_array.proto\"\r\n\x0bPoseRequest\"\r\n\x0b\x44oneRequest\"!\n\x0cPoseResponse\x12\x11\n\tjoint_pos\x18\x01 \x03(\x02\"\x1c\n\x0c\x44oneResponse\x12\x0c\n\x04\x64one\x18\x01 \x01(\x08\"\x0b\n\tIdRequest\"\x18\n\nIdResponse\x12\n\n\x02id\x18\x01 \x01(\r\"\x12\n\x10TelemetryRequest\"A\n\x11TelemetryResponse\x12\x10\n\x08position\x18\x01 \x03(\x02\x12\r\n\x05\x65rror\x18\x02 \x03(\x02\x12\x0b\n\x03pwm\x18\x03 \x03(\x11\"\xb9\x02\n\x0bStatusFrame\x12 \n\x08pose_req\x18\x01 \x01(\x0b\x32\x0c.PoseRequestH\x00\x12 \n\x08\x64one_req\x18\x02 \x01(\x0b\x32\x0c.DoneRequestH\x00\x12\"\n\tpose_resp\x18\x03 \x01(\x0b\x32\r.PoseResponseH\x00\x12\"\n\tdone_resp\x18\x04 \x01(\x0b\x32\r.DoneResponseH\x00\x12\x1c\n\x06id_req\x18\x05 \x01(\x0b\x32\n.IdRequestH\x00\x12\x1e\n\x07id_resp\x18\x06 \x01(\x0b\x32\x0b.IdResponseH\x00\x12*\n\rtelemetry_req\x18\x07 \x01(\x0b\x32\x11.TelemetryRequestH\x00\x12,\n\x0etelemetry_resp\x18\x08 \x01(\x0b\x32\x12.TelemetryResponseH\x00\x42\x06\n\x04kind\" \n\x0bMoveCommand\x12\x11\n\tjoint_pos\x18\x01 \x03(\x02\"&\n\x11TrajectoryCommand\x12\x11\n\tjoint_pos\x18\x01 \x03(\x02\"\x0e\n\x0cResetCommand\"\r\n\x0bStopCommand\"F\n\rSetPwmCommand\x12\x13\n\x0bmotor_index\x18\x01 \x01(\r\x12\x0b\n\x03pwm\x18\x02 \x01(\x11\x12\x13\n\x0b\x64uration_ms\x18\x03 \x01(\r\"\xe0\x01\n\x10SetConfigCommand\x12\x18\n\x0bmotor_index\x18\x01 \x01(\rH\x00\x88\x01\x01\x12\x15\n\x08\x64\x65\x61\x64\x62\x61nd\x18\x02 \x01(\x02H\x01\x88\x01\x01\x12\x15\n\x08\x62ias_fwd\x18\x03 \x01(\x11H\x02\x88\x01\x01\x12\x16\n\tbias_back\x18\x04 \x01(\x11H\x03\x88\x01\x01\x12\x1e\n\x11\x62rake_at_setpoint\x18\x05 \x01(\x08H\x04\x88\x01\x01\x42\x0e\n\x0c_motor_indexB\x0b\n\t_deadbandB\x0b\n\t_bias_fwdB\x0c\n\n_bias_backB\x14\n\x12_brake_at_setpoint\"\xe0\x01\n\nJointFrame\x12\x1c\n\x04move\x18\x01 \x01(\x0b\x32\x0c.MoveCommandH\x00\x12\"\n\x04traj\x18\x02 \x01(\x0b\x32\x12.TrajectoryCommandH\x00\x12\x1e\n\x05reset\x18\x03 \x01(\x0b\x32\r.ResetCommandH\x00\x12\x1c\n\x04stop\x18\x04 \x01(\x0b\x32\x0c.StopCommandH\x00\x12!\n\x07set_pwm\x18\x05 \x01(\x0b\x32\x0e.SetPwmCommandH\x00\x12\'\n\nset_config\x18\x06 \x01(\x0b\x32\x11.SetConfigCommandH\x00\x42\x06\n\x04kind\"(\n\nCommandAck\x12\x1a\n\x06status\x18\x01 \x01(\x0e\x32\n.AckStatus\"\x7f\n\x0c\x44\x65ltaMessage\x12\n\n\x02id\x18\x01 \x01(\x05\x12\x1e\n\x06status\x18\x02 \x01(\x0b\x32\x0c.StatusFrameH\x00\x12\x1c\n\x05joint\x18\x03 \x01(\x0b\x32\x0b.JointFrameH\x00\x12\x1a\n\x03\x61\x63k\x18\x04 \x01(\x0b\x32\x0b.CommandAckH\x00\x42\t\n\x07payload*I\n\tAckStatus\x12\n\n\x06\x41\x43K_OK\x10\x00\x12\x17\n\x13\x41\x43K_VALIDATION_FAIL\x10\x01\x12\x17\n\x13\x41\x43K_UNKNOWN_COMMAND\x10\x02\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x11\x64\x65lta_array.proto\"\r\n\x0bPoseRequest\"\r\n\x0b\x44oneRequest\"!\n\x0cPoseResponse\x12\x11\n\tjoint_pos\x18\x01 \x03(\x02\"\x1c\n\x0c\x44oneResponse\x12\x0c\n\x04\x64one\x18\x01 \x01(\x08\"\x0b\n\tIdRequest\"\x18\n\nIdResponse\x12\n\n\x02id\x18\x01 \x01(\r\"\x12\n\x10TelemetryRequest\"A\n\x11TelemetryResponse\x12\x10\n\x08position\x18\x01 \x03(\x02\x12\r\n\x05\x65rror\x18\x02 \x03(\x02\x12\x0b\n\x03pwm\x18\x03 \x03(\x11\"\x0f\n\rConfigRequest\"b\n\x0e\x43onfigResponse\x12\x10\n\x08\x64\x65\x61\x64\x62\x61nd\x18\x01 \x03(\x02\x12\x10\n\x08\x62ias_fwd\x18\x02 \x03(\x11\x12\x11\n\tbias_back\x18\x03 \x03(\x11\x12\x19\n\x11\x62rake_at_setpoint\x18\x04 \x01(\x08\"\x87\x03\n\x0bStatusFrame\x12 \n\x08pose_req\x18\x01 \x01(\x0b\x32\x0c.PoseRequestH\x00\x12 \n\x08\x64one_req\x18\x02 \x01(\x0b\x32\x0c.DoneRequestH\x00\x12\"\n\tpose_resp\x18\x03 \x01(\x0b\x32\r.PoseResponseH\x00\x12\"\n\tdone_resp\x18\x04 \x01(\x0b\x32\r.DoneResponseH\x00\x12\x1c\n\x06id_req\x18\x05 \x01(\x0b\x32\n.IdRequestH\x00\x12\x1e\n\x07id_resp\x18\x06 \x01(\x0b\x32\x0b.IdResponseH\x00\x12*\n\rtelemetry_req\x18\x07 \x01(\x0b\x32\x11.TelemetryRequestH\x00\x12,\n\x0etelemetry_resp\x18\x08 \x01(\x0b\x32\x12.TelemetryResponseH\x00\x12$\n\nconfig_req\x18\t \x01(\x0b\x32\x0e.ConfigRequestH\x00\x12&\n\x0b\x63onfig_resp\x18\n \x01(\x0b\x32\x0f.ConfigResponseH\x00\x42\x06\n\x04kind\" \n\x0bMoveCommand\x12\x11\n\tjoint_pos\x18\x01 \x03(\x02\"&\n\x11TrajectoryCommand\x12\x11\n\tjoint_pos\x18\x01 \x03(\x02\"\x0e\n\x0cResetCommand\"\r\n\x0bStopCommand\"F\n\rSetPwmCommand\x12\x13\n\x0bmotor_index\x18\x01 \x01(\r\x12\x0b\n\x03pwm\x18\x02 \x01(\x11\x12\x13\n\x0b\x64uration_ms\x18\x03 \x01(\r\"\xe0\x01\n\x10SetConfigCommand\x12\x18\n\x0bmotor_index\x18\x01 \x01(\rH\x00\x88\x01\x01\x12\x15\n\x08\x64\x65\x61\x64\x62\x61nd\x18\x02 \x01(\x02H\x01\x88\x01\x01\x12\x15\n\x08\x62ias_fwd\x18\x03 \x01(\x11H\x02\x88\x01\x01\x12\x16\n\tbias_back\x18\x04 \x01(\x11H\x03\x88\x01\x01\x12\x1e\n\x11\x62rake_at_setpoint\x18\x05 \x01(\x08H\x04\x88\x01\x01\x42\x0e\n\x0c_motor_indexB\x0b\n\t_deadbandB\x0b\n\t_bias_fwdB\x0c\n\n_bias_backB\x14\n\x12_brake_at_setpoint\"\xe0\x01\n\nJointFrame\x12\x1c\n\x04move\x18\x01 \x01(\x0b\x32\x0c.MoveCommandH\x00\x12\"\n\x04traj\x18\x02 \x01(\x0b\x32\x12.TrajectoryCommandH\x00\x12\x1e\n\x05reset\x18\x03 \x01(\x0b\x32\r.ResetCommandH\x00\x12\x1c\n\x04stop\x18\x04 \x01(\x0b\x32\x0c.StopCommandH\x00\x12!\n\x07set_pwm\x18\x05 \x01(\x0b\x32\x0e.SetPwmCommandH\x00\x12\'\n\nset_config\x18\x06 \x01(\x0b\x32\x11.SetConfigCommandH\x00\x42\x06\n\x04kind\"(\n\nCommandAck\x12\x1a\n\x06status\x18\x01 \x01(\x0e\x32\n.AckStatus\"\x7f\n\x0c\x44\x65ltaMessage\x12\n\n\x02id\x18\x01 \x01(\x05\x12\x1e\n\x06status\x18\x02 \x01(\x0b\x32\x0c.StatusFrameH\x00\x12\x1c\n\x05joint\x18\x03 \x01(\x0b\x32\x0b.JointFrameH\x00\x12\x1a\n\x03\x61\x63k\x18\x04 \x01(\x0b\x32\x0b.CommandAckH\x00\x42\t\n\x07payload*I\n\tAckStatus\x12\n\n\x06\x41\x43K_OK\x10\x00\x12\x17\n\x13\x41\x43K_VALIDATION_FAIL\x10\x01\x12\x17\n\x13\x41\x43K_UNKNOWN_COMMAND\x10\x02\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'delta_array_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_ACKSTATUS']._serialized_start=1360
-  _globals['_ACKSTATUS']._serialized_end=1433
+  _globals['_ACKSTATUS']._serialized_start=1555
+  _globals['_ACKSTATUS']._serialized_end=1628
   _globals['_POSEREQUEST']._serialized_start=21
   _globals['_POSEREQUEST']._serialized_end=34
   _globals['_DONEREQUEST']._serialized_start=36
@@ -49,24 +49,28 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TELEMETRYREQUEST']._serialized_end=173
   _globals['_TELEMETRYRESPONSE']._serialized_start=175
   _globals['_TELEMETRYRESPONSE']._serialized_end=240
-  _globals['_STATUSFRAME']._serialized_start=243
-  _globals['_STATUSFRAME']._serialized_end=556
-  _globals['_MOVECOMMAND']._serialized_start=558
-  _globals['_MOVECOMMAND']._serialized_end=590
-  _globals['_TRAJECTORYCOMMAND']._serialized_start=592
-  _globals['_TRAJECTORYCOMMAND']._serialized_end=630
-  _globals['_RESETCOMMAND']._serialized_start=632
-  _globals['_RESETCOMMAND']._serialized_end=646
-  _globals['_STOPCOMMAND']._serialized_start=648
-  _globals['_STOPCOMMAND']._serialized_end=661
-  _globals['_SETPWMCOMMAND']._serialized_start=663
-  _globals['_SETPWMCOMMAND']._serialized_end=733
-  _globals['_SETCONFIGCOMMAND']._serialized_start=736
-  _globals['_SETCONFIGCOMMAND']._serialized_end=960
-  _globals['_JOINTFRAME']._serialized_start=963
-  _globals['_JOINTFRAME']._serialized_end=1187
-  _globals['_COMMANDACK']._serialized_start=1189
-  _globals['_COMMANDACK']._serialized_end=1229
-  _globals['_DELTAMESSAGE']._serialized_start=1231
-  _globals['_DELTAMESSAGE']._serialized_end=1358
+  _globals['_CONFIGREQUEST']._serialized_start=242
+  _globals['_CONFIGREQUEST']._serialized_end=257
+  _globals['_CONFIGRESPONSE']._serialized_start=259
+  _globals['_CONFIGRESPONSE']._serialized_end=357
+  _globals['_STATUSFRAME']._serialized_start=360
+  _globals['_STATUSFRAME']._serialized_end=751
+  _globals['_MOVECOMMAND']._serialized_start=753
+  _globals['_MOVECOMMAND']._serialized_end=785
+  _globals['_TRAJECTORYCOMMAND']._serialized_start=787
+  _globals['_TRAJECTORYCOMMAND']._serialized_end=825
+  _globals['_RESETCOMMAND']._serialized_start=827
+  _globals['_RESETCOMMAND']._serialized_end=841
+  _globals['_STOPCOMMAND']._serialized_start=843
+  _globals['_STOPCOMMAND']._serialized_end=856
+  _globals['_SETPWMCOMMAND']._serialized_start=858
+  _globals['_SETPWMCOMMAND']._serialized_end=928
+  _globals['_SETCONFIGCOMMAND']._serialized_start=931
+  _globals['_SETCONFIGCOMMAND']._serialized_end=1155
+  _globals['_JOINTFRAME']._serialized_start=1158
+  _globals['_JOINTFRAME']._serialized_end=1382
+  _globals['_COMMANDACK']._serialized_start=1384
+  _globals['_COMMANDACK']._serialized_end=1424
+  _globals['_DELTAMESSAGE']._serialized_start=1426
+  _globals['_DELTAMESSAGE']._serialized_end=1553
 # @@protoc_insertion_point(module_scope)

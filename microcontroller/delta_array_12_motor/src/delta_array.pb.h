@@ -66,6 +66,25 @@ typedef struct _TelemetryResponse {
     int32_t pwm[12]; /* 12, last applied signed PWM (-255..255, 0 = released) */
 } TelemetryResponse;
 
+/* Config readback: the host asks a board for its live tuning (config_req) and
+ the board answers (config_resp) with the current per-motor deadband/bias and
+ the board-global brake mode. SetConfigCommand is otherwise write-only, so this
+ is the only way to verify what a board is actually running -- important
+ because the config is RAM-only and reverts to the compiled defaults on reboot. */
+typedef struct _ConfigRequest {
+    char dummy_field;
+} ConfigRequest;
+
+typedef struct _ConfigResponse {
+    pb_size_t deadband_count;
+    float deadband[12]; /* 12, meters */
+    pb_size_t bias_fwd_count;
+    int32_t bias_fwd[12]; /* 12, static feedforward PWM (FORWARD) */
+    pb_size_t bias_back_count;
+    int32_t bias_back[12]; /* 12, static feedforward PWM (BACKWARD) */
+    bool brake_at_setpoint; /* board-global: brake (true) vs coast at setpoint */
+} ConfigResponse;
+
 typedef struct _StatusFrame {
     pb_size_t which_kind;
     union {
@@ -77,6 +96,8 @@ typedef struct _StatusFrame {
         IdResponse id_resp;
         TelemetryRequest telemetry_req;
         TelemetryResponse telemetry_resp;
+        ConfigRequest config_req;
+        ConfigResponse config_resp;
     } kind;
 } StatusFrame;
 
@@ -182,6 +203,8 @@ extern "C" {
 
 
 
+
+
 #define CommandAck_status_ENUMTYPE AckStatus
 
 
@@ -195,6 +218,8 @@ extern "C" {
 #define IdResponse_init_default                  {0}
 #define TelemetryRequest_init_default            {0}
 #define TelemetryResponse_init_default           {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
+#define ConfigRequest_init_default               {0}
+#define ConfigResponse_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0}
 #define StatusFrame_init_default                 {0, {PoseRequest_init_default}}
 #define MoveCommand_init_default                 {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define TrajectoryCommand_init_default           {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
@@ -213,6 +238,8 @@ extern "C" {
 #define IdResponse_init_zero                     {0}
 #define TelemetryRequest_init_zero               {0}
 #define TelemetryResponse_init_zero              {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
+#define ConfigRequest_init_zero                  {0}
+#define ConfigResponse_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0}
 #define StatusFrame_init_zero                    {0, {PoseRequest_init_zero}}
 #define MoveCommand_init_zero                    {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 #define TrajectoryCommand_init_zero              {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
@@ -231,6 +258,10 @@ extern "C" {
 #define TelemetryResponse_position_tag           1
 #define TelemetryResponse_error_tag              2
 #define TelemetryResponse_pwm_tag                3
+#define ConfigResponse_deadband_tag              1
+#define ConfigResponse_bias_fwd_tag              2
+#define ConfigResponse_bias_back_tag             3
+#define ConfigResponse_brake_at_setpoint_tag     4
 #define StatusFrame_pose_req_tag                 1
 #define StatusFrame_done_req_tag                 2
 #define StatusFrame_pose_resp_tag                3
@@ -239,6 +270,8 @@ extern "C" {
 #define StatusFrame_id_resp_tag                  6
 #define StatusFrame_telemetry_req_tag            7
 #define StatusFrame_telemetry_resp_tag           8
+#define StatusFrame_config_req_tag               9
+#define StatusFrame_config_resp_tag              10
 #define MoveCommand_joint_pos_tag                1
 #define TrajectoryCommand_joint_pos_tag          1
 #define SetPwmCommand_motor_index_tag            1
@@ -304,6 +337,19 @@ X(a, STATIC,   REPEATED, SINT32,   pwm,               3)
 #define TelemetryResponse_CALLBACK NULL
 #define TelemetryResponse_DEFAULT NULL
 
+#define ConfigRequest_FIELDLIST(X, a) \
+
+#define ConfigRequest_CALLBACK NULL
+#define ConfigRequest_DEFAULT NULL
+
+#define ConfigResponse_FIELDLIST(X, a) \
+X(a, STATIC,   REPEATED, FLOAT,    deadband,          1) \
+X(a, STATIC,   REPEATED, SINT32,   bias_fwd,          2) \
+X(a, STATIC,   REPEATED, SINT32,   bias_back,         3) \
+X(a, STATIC,   SINGULAR, BOOL,     brake_at_setpoint,   4)
+#define ConfigResponse_CALLBACK NULL
+#define ConfigResponse_DEFAULT NULL
+
 #define StatusFrame_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,pose_req,kind.pose_req),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,done_req,kind.done_req),   2) \
@@ -312,7 +358,9 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (kind,done_resp,kind.done_resp),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,id_req,kind.id_req),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,id_resp,kind.id_resp),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (kind,telemetry_req,kind.telemetry_req),   7) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (kind,telemetry_resp,kind.telemetry_resp),   8)
+X(a, STATIC,   ONEOF,    MESSAGE,  (kind,telemetry_resp,kind.telemetry_resp),   8) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (kind,config_req,kind.config_req),   9) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (kind,config_resp,kind.config_resp),  10)
 #define StatusFrame_CALLBACK NULL
 #define StatusFrame_DEFAULT NULL
 #define StatusFrame_kind_pose_req_MSGTYPE PoseRequest
@@ -323,6 +371,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (kind,telemetry_resp,kind.telemetry_resp),   
 #define StatusFrame_kind_id_resp_MSGTYPE IdResponse
 #define StatusFrame_kind_telemetry_req_MSGTYPE TelemetryRequest
 #define StatusFrame_kind_telemetry_resp_MSGTYPE TelemetryResponse
+#define StatusFrame_kind_config_req_MSGTYPE ConfigRequest
+#define StatusFrame_kind_config_resp_MSGTYPE ConfigResponse
 
 #define MoveCommand_FIELDLIST(X, a) \
 X(a, STATIC,   REPEATED, FLOAT,    joint_pos,         1)
@@ -400,6 +450,8 @@ extern const pb_msgdesc_t IdRequest_msg;
 extern const pb_msgdesc_t IdResponse_msg;
 extern const pb_msgdesc_t TelemetryRequest_msg;
 extern const pb_msgdesc_t TelemetryResponse_msg;
+extern const pb_msgdesc_t ConfigRequest_msg;
+extern const pb_msgdesc_t ConfigResponse_msg;
 extern const pb_msgdesc_t StatusFrame_msg;
 extern const pb_msgdesc_t MoveCommand_msg;
 extern const pb_msgdesc_t TrajectoryCommand_msg;
@@ -420,6 +472,8 @@ extern const pb_msgdesc_t DeltaMessage_msg;
 #define IdResponse_fields &IdResponse_msg
 #define TelemetryRequest_fields &TelemetryRequest_msg
 #define TelemetryResponse_fields &TelemetryResponse_msg
+#define ConfigRequest_fields &ConfigRequest_msg
+#define ConfigResponse_fields &ConfigResponse_msg
 #define StatusFrame_fields &StatusFrame_msg
 #define MoveCommand_fields &MoveCommand_msg
 #define TrajectoryCommand_fields &TrajectoryCommand_msg
@@ -433,6 +487,8 @@ extern const pb_msgdesc_t DeltaMessage_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define CommandAck_size                          2
+#define ConfigRequest_size                       0
+#define ConfigResponse_size                      206
 #define DELTA_ARRAY_PB_H_MAX_SIZE                DeltaMessage_size
 #define DeltaMessage_size                        1217
 #define DoneRequest_size                         0
@@ -446,7 +502,7 @@ extern const pb_msgdesc_t DeltaMessage_msg;
 #define ResetCommand_size                        0
 #define SetConfigCommand_size                    25
 #define SetPwmCommand_size                       18
-#define StatusFrame_size                         195
+#define StatusFrame_size                         209
 #define StopCommand_size                         0
 #define TelemetryRequest_size                    0
 #define TelemetryResponse_size                   192

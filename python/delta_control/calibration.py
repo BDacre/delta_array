@@ -39,6 +39,7 @@ Typical use::
 import glob
 import json
 import os
+from dataclasses import dataclass, field
 
 from .constants import NUM_MOTORS
 
@@ -46,6 +47,29 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 DEFAULT_CALIBRATION_DIR = os.path.join(REPO_ROOT, "config", "calibration")
 
 _MOTOR_FIELDS = ("deadband", "bias_fwd", "bias_back")
+
+# Firmware stores deadband as float32, so an exact == against the JSON's float
+# would spuriously fail; allow this much rounding slack (1 µm << any real value).
+DEADBAND_TOL = 1e-6
+
+
+@dataclass
+class BoardCalibResult:
+    """Outcome of provisioning/verifying one board (see DeltaArrayEnv.provision).
+
+    A structured result rather than a printed line, so library callers can act on
+    it (assert, log, retry) instead of scraping stdout. `ok` is the single
+    pass/fail: True only when no error occurred and the readback matched.
+    """
+    board_id: int
+    applied: bool                 # did we write the calibration (vs. verify-only)
+    mismatches: list = field(default_factory=list)  # readback vs JSON diff lines
+    brake_at_setpoint: bool | None = None  # live brake mode read back (None if unread)
+    error: str | None = None      # non-diff failure (no file, old firmware, id clash)
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None and not self.mismatches
 
 
 def calibration_path(board_id, calib_dir=None):
@@ -172,3 +196,38 @@ def apply_calibration(agent, calib):
     if brake is not None:
         agent.set_config(brake_at_setpoint=bool(brake))
     return configured
+
+
+def diff_calibration(live, calib, *, deadband_tol=DEADBAND_TOL):
+    """Compare a board's live config to a calibration; return mismatch strings.
+
+    ``live`` is a dict as returned by ``DeltaArrayAgent.get_config`` (12-lists for
+    deadband/bias_fwd/bias_back plus a brake_at_setpoint bool); ``calib`` is a
+    loaded calibration dict. Returns a list of human-readable mismatch lines --
+    empty means the board is running this calibration.
+
+    Only fields the JSON actually specifies are checked: an omitted per-motor
+    field means "leave the firmware value alone", so it can never be a mismatch.
+    brake_at_setpoint is compared only when the JSON sets it (else the board keeps
+    whatever mode it had). Deadband is compared with ``deadband_tol`` slack for
+    float32 rounding. This is the single source of truth for both read_config.py
+    (one board) and provision_array.py (the whole array).
+    """
+    mismatches = []
+    motors = calib["motors"]
+    for i in range(NUM_MOTORS):
+        m = motors[i] if i < len(motors) else {}
+        if "deadband" in m and abs(m["deadband"] - live["deadband"][i]) > deadband_tol:
+            mismatches.append(
+                f"motor {i:2d} deadband: JSON {m['deadband']:.4f} m "
+                f"!= board {live['deadband'][i]:.4f} m")
+        for key in ("bias_fwd", "bias_back"):
+            if key in m and m[key] != live[key][i]:
+                mismatches.append(
+                    f"motor {i:2d} {key}: JSON {m[key]} != board {live[key][i]}")
+    want_brake = calib.get("brake_at_setpoint")
+    if want_brake is not None and bool(want_brake) != live["brake_at_setpoint"]:
+        mismatches.append(
+            f"brake_at_setpoint: JSON {bool(want_brake)} "
+            f"!= board {live['brake_at_setpoint']}")
+    return mismatches

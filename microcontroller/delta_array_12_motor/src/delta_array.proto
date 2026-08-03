@@ -22,6 +22,19 @@ message TelemetryResponse {
     repeated sint32 pwm      = 3;   // 12, last applied signed PWM (-255..255, 0 = released)
 }
 
+// Config readback: the host asks a board for its live tuning (config_req) and
+// the board answers (config_resp) with the current per-motor deadband/bias and
+// the board-global brake mode. SetConfigCommand is otherwise write-only, so this
+// is the only way to verify what a board is actually running -- important
+// because the config is RAM-only and reverts to the compiled defaults on reboot.
+message ConfigRequest  {}
+message ConfigResponse {
+    repeated float  deadband          = 1;  // 12, meters
+    repeated sint32 bias_fwd          = 2;  // 12, static feedforward PWM (FORWARD)
+    repeated sint32 bias_back         = 3;  // 12, static feedforward PWM (BACKWARD)
+    bool            brake_at_setpoint = 4;  // board-global: brake (true) vs coast at setpoint
+}
+
 message StatusFrame {
     oneof kind {
         PoseRequest       pose_req       = 1;
@@ -32,6 +45,8 @@ message StatusFrame {
         IdResponse        id_resp        = 6;
         TelemetryRequest  telemetry_req  = 7;
         TelemetryResponse telemetry_resp = 8;
+        ConfigRequest     config_req     = 9;
+        ConfigResponse    config_resp    = 10;
     }
 }
 

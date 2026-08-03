@@ -1,5 +1,6 @@
 import glob
 import time
+import warnings
 from math import pi
 
 import numpy as np
@@ -10,6 +11,7 @@ from . import delta_array_pb2
 from .delta_array_agent import DeltaArrayAgent
 from .constants import (
     ACK_TIMEOUT_S,
+    BOARD_LABELS,
     BOARD_PORT_GLOB,
     BOARD_REGISTRY,
     BOARD_USB_IDS,
@@ -29,6 +31,13 @@ from .constants import (
 from .get_coords import RoboCoords
 from .prismatic_delta import PrismaticDelta
 from .transport import ProtoTransport
+from .calibration import (
+    BoardCalibResult,
+    apply_calibration,
+    calibration_path,
+    diff_calibration,
+    load_calibration,
+)
 
 delta = PrismaticDelta(PLATFORM_TRIANGLE_SIDE_LEN, BASE_TRIANGLE_SIDE_LEN, LEG_LENGTH, EE_Z_OFFSET)
 rc = RoboCoords()
@@ -105,9 +114,18 @@ class DeltaArrayEnv:
       * None (default) -> keep every board discovered.
       * an iterable of ids and/or BOARD_REGISTRY labels -> keep only those; a
         requested id that never answers raises DiscoveryError.
+    verify_calibration:
+      * False (default) -> connect only; do not touch board config. Keeps
+        low-level uses (diagnostics, characterization, --no-calibration tests)
+        unaffected.
+      * True -> after discovery, read each board's live config back and warn
+        (does NOT write) if any board is not running its calibration JSON, so a
+        board silently on firmware defaults is caught at connect. Call
+        env.provision() to fix.
     """
 
-    def __init__(self, ports=None, *, ids=None, baud=DEFAULT_BAUD):
+    def __init__(self, ports=None, *, ids=None, baud=DEFAULT_BAUD,
+                 verify_calibration=False):
         wanted = _resolve_id_filter(ids)
 
         if ports is None:
@@ -162,6 +180,9 @@ class DeltaArrayEnv:
         self.lowz = 0.08
         self.highz = 0.11
 
+        if verify_calibration:
+            self._warn_on_calibration_mismatch()
+
     @property
     def agent(self):
         # Convenience for the single-board case: the one active agent. Raises if
@@ -187,6 +208,83 @@ class DeltaArrayEnv:
 
         for i in self.active_ids:
             self.agents[i].move_joint_position(jts)
+
+    def _provision_board(self, board_id, *, apply, calib_dir):
+        """Apply (optional) then read back and diff one board's calibration."""
+        calib = load_calibration(board_id, calib_dir)
+        if calib is None:
+            return BoardCalibResult(
+                board_id, applied=False,
+                error=f"no calibration file (expected {calibration_path(board_id, calib_dir)})")
+        cfg_id = calib.get("board_id")
+        if cfg_id is not None and cfg_id != board_id:
+            return BoardCalibResult(
+                board_id, applied=False,
+                error=f"calibration board_id {cfg_id} != connected board {board_id}")
+
+        agent = self.agents[board_id]
+        if apply:
+            apply_calibration(agent, calib)
+        live = agent.get_config()
+        if live is None:
+            return BoardCalibResult(
+                board_id, applied=apply,
+                error="board returned no config_resp (firmware predates ConfigRequest; reflash)")
+        return BoardCalibResult(
+            board_id, applied=apply,
+            mismatches=diff_calibration(live, calib),
+            brake_at_setpoint=live["brake_at_setpoint"])
+
+    def provision(self, *, calib_dir=None):
+        """Push each connected board's calibration (by chip id) and verify it.
+
+        For every active board: load its calibration JSON, apply it over serial,
+        then read the live config back (ConfigRequest) and diff it against the
+        JSON. Config-only -- no motion. Returns ``{board_id: BoardCalibResult}``;
+        a board with no calibration file, a readback mismatch, or old firmware is
+        reported via ``result.ok is False`` rather than raising, so one bad board
+        never aborts the rest. This is the same call path the provision_array CLI
+        uses, so a library consumer runs identical logic:
+
+            env = DeltaArrayEnv()
+            report = env.provision()
+            assert all(r.ok for r in report.values()), \\
+                [r for r in report.values() if not r.ok]
+        """
+        return {b: self._provision_board(b, apply=True, calib_dir=calib_dir)
+                for b in self.active_ids}
+
+    def check_calibration(self, *, calib_dir=None):
+        """Read back and diff every connected board WITHOUT writing anything.
+
+        A fast, side-effect-free gate: confirm the array is already running its
+        calibration before trusting a session. Returns ``{board_id:
+        BoardCalibResult}``; ``result.ok is False`` on any mismatch (e.g. a board
+        that reverted to firmware defaults after a power-cycle).
+        """
+        return {b: self._provision_board(b, apply=False, calib_dir=calib_dir)
+                for b in self.active_ids}
+
+    def _warn_on_calibration_mismatch(self):
+        """Read back every board and warn (no writes) if any isn't calibrated.
+
+        Backs the DeltaArrayEnv(verify_calibration=True) opt-in. Emits a single
+        warning summarising the offending boards; call env.provision() to fix.
+        """
+        bad = [r for r in self.check_calibration().values() if not r.ok]
+        if not bad:
+            return
+        lines = []
+        for r in bad:
+            label = BOARD_LABELS.get(r.board_id)
+            name = f"{r.board_id} ({label})" if label else str(r.board_id)
+            reason = r.error or f"{len(r.mismatches)} config mismatch(es)"
+            lines.append(f"  board {name}: {reason}")
+        warnings.warn(
+            f"{len(bad)} board(s) not running their calibration "
+            f"(call env.provision() to fix):\n" + "\n".join(lines),
+            stacklevel=3,
+        )
 
     def close(self):
         # Release every serial port. Safe to call repeatedly, or on a partially
@@ -336,17 +434,21 @@ def _resolve_id_filter(ids):
     return {_resolve_board_id(x) for x in ids}
 
 
-def open_board(port=None, id_or_label=None, *, baud=DEFAULT_BAUD):
+def open_board(port=None, id_or_label=None, *, baud=DEFAULT_BAUD,
+               verify_calibration=False):
     """Open a single board and return (env, agent).
 
     Thin single-board convenience over DeltaArrayEnv.
       * port None -> scan BOARD_PORT_GLOB; a path (or list) -> open just that.
       * id_or_label None -> the one board found; an id or BOARD_REGISTRY label ->
         that specific board.
+      * verify_calibration True -> warn (no writes) if the board isn't running
+        its calibration JSON (see DeltaArrayEnv).
     Raises DiscoveryError unless the selection resolves to exactly one board.
     """
     ids = None if id_or_label is None else [id_or_label]
-    env = DeltaArrayEnv(ports=port, ids=ids, baud=baud)
+    env = DeltaArrayEnv(ports=port, ids=ids, baud=baud,
+                        verify_calibration=verify_calibration)
     if len(env.active_ids) != 1:
         found = env.active_ids
         env.close()
