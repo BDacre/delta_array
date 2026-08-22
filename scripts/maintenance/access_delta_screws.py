@@ -13,12 +13,11 @@ from delta_control.constants import NUM_MOTORS
 DELTA_ORDER = [0,1,2,3]
 TARGET_POS = [0.09, 0.09, 0.09]
 DEFAULT_PORT = None  # None auto-detects the board's port by scanning /dev/ttyACM*
-# Target a specific board by label. Pass the label itself (not .get(), which would
-# silently become None -> "auto-discover whatever single board is connected", i.e.
-# happily drive the wrong board). With a concrete label, open_board addresses only
-# that board and raises DiscoveryError if it isn't present. Set to None only if you
-# deliberately want "the one connected board".
-DEFAULT_BOARD = "board1"
+# None -> auto-discover whatever single board is connected. open_board raises
+# DiscoveryError if more than one board is present, so this is safe for the common
+# single-board case. Pass a concrete label (e.g. "board1") via --id to address one
+# specific board when several are connected.
+DEFAULT_BOARD = None
 
 
 def run(port: str, board=None) -> None:

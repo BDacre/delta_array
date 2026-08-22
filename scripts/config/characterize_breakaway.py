@@ -114,7 +114,7 @@ def _fmt_stats(vals):
             f"sd {sd:.1f}  values {found}{miss}")
 
 
-def print_json_seed(breakaway, motors, board_id, bias_margin, deadband=0):
+def print_json_seed(breakaway, motors, board_id, bias_margin, deadband=0.0001):
     """Print a board_<name>.json-ready block seeding bias from the breakaway means.
 
     Rule: bias = max(0, round(mean_breakaway - bias_margin)), routed by direction

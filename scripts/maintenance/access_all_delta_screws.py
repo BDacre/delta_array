@@ -13,7 +13,8 @@ Boards in the registry that aren't currently connected are skipped with a note.
 import time
 
 from delta_control import DeltaArrayEnv
-from delta_control.constants import BOARD_REGISTRY, NUM_MOTORS
+from delta_control.boards import BOARD_REGISTRY, board_order
+from delta_control.constants import NUM_MOTORS
 
 DELTA_ORDER = [0, 1, 2, 3]          # the 4 sub-deltas on each board
 TARGET_POS = [0.09, 0.09, 0.09]     # screw-access height (raised)
@@ -39,7 +40,7 @@ def run() -> None:
     env = DeltaArrayEnv()  # open every connected board, agents keyed by chip id
     print(f"connected board ids: {env.active_ids}")
     try:
-        for label in sorted(BOARD_REGISTRY):
+        for label in board_order():
             board_id = BOARD_REGISTRY[label]
             agent = env.agents.get(board_id)
             if agent is None:

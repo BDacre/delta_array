@@ -9,11 +9,10 @@ from serial.tools import list_ports
 
 from . import delta_array_pb2
 from .delta_array_agent import DeltaArrayAgent
+from .boards import BOARD_LABELS, BOARD_REGISTRY
 from .constants import (
     ACK_TIMEOUT_S,
-    BOARD_LABELS,
     BOARD_PORT_GLOB,
-    BOARD_REGISTRY,
     BOARD_USB_IDS,
     BROADCAST_ID,
     DEFAULT_BAUD,

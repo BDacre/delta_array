@@ -12,7 +12,8 @@ import argparse
 import random
 
 from delta_control import DeltaArrayEnv
-from delta_control.constants import BOARD_REGISTRY, NUM_MOTORS
+from delta_control.boards import BOARD_REGISTRY, board_order
+from delta_control.constants import NUM_MOTORS
 
 MOTORS_PER_DELTA = 3
 DELTAS_PER_BOARD = NUM_MOTORS // MOTORS_PER_DELTA  # 4
@@ -20,7 +21,7 @@ DELTAS_PER_BOARD = NUM_MOTORS // MOTORS_PER_DELTA  # 4
 
 def run(low=0.01, high=0.03, seed=None) -> None:
     rng = random.Random(seed)
-    labels = sorted(BOARD_REGISTRY)
+    labels = board_order()
     n_deltas = len(labels) * DELTAS_PER_BOARD
     # One random height per delta.
     heights = [round(rng.uniform(low, high), 4) for _ in range(n_deltas)]

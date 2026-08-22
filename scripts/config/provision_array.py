@@ -32,7 +32,7 @@ import argparse
 import sys
 
 from delta_control import DeltaArrayEnv, DiscoveryError
-from delta_control.constants import BOARD_LABELS, BOARD_REGISTRY
+from delta_control.boards import BOARD_LABELS, BOARD_REGISTRY, check_calibration_ids
 
 MAX_SHOWN = 3  # per-board mismatch lines to print inline before eliding
 
@@ -68,6 +68,17 @@ def _detail(result, apply):
 
 
 def run(ports, expect, apply):
+    # If the registry and the calibration files disagree about which id is which
+    # board, provisioning would push one board's numbers onto another. Cheap to
+    # check (no hardware) and worth doing before opening a single port.
+    problems = check_calibration_ids()
+    if problems:
+        for line in problems:
+            print(f"  [FAIL] registry: {line}")
+        print("\nSUMMARY: BOARD_REGISTRY disagrees with config/calibration "
+              "-- fix before provisioning")
+        return 1
+
     try:
         env = DeltaArrayEnv(ports=ports)
     except DiscoveryError as e:

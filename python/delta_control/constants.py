@@ -28,8 +28,16 @@ TIP_RADIUS = 0.0075
 EE_Z_OFFSET = TIP_HEIGHT + PLATFORM_TRIANGLE_HEIGHT
 
 # Default home pose for the EE tip: FK of all three actuators at the center of
-# their travel (0.05675 m). Recompute if the geometry or EE offset changes.
-HOME_POSITION = (0.0, 0.0, 0.13648692036511054)
+# their travel, (MIN_JOINT_POS + MAX_JOINT_POS) / 2 = 0.05175 m. Recompute if the
+# geometry, the joint limits or the EE offset changes.
+#
+# This was 0.13648692036511054 (joint 0.05675 m) until 2026-08-18, which sat 5.00 mm
+# high: 0.05675 = 0.05175 + 0.005, i.e. mid-travel with MIN_JOINT_POS added a second
+# time. The effect was a home pose 5 mm off centre, leaving 41.75 mm of travel above
+# it and 51.75 mm below. Anything that opens symmetrically about home (the paraboloid
+# in delta_array_connected_manipulation, tilt, saddle) was clipped by the short side
+# while the long side went unused.
+HOME_POSITION = (0.0, 0.0, 0.13148692036511053)
 
 # Physical layout of robots in the 8x8 array (meters).
 # Triangular grid: every other column is offset by half the row pitch.
@@ -49,20 +57,9 @@ DEFAULT_ACTIVE_AGENT_IDS = (9,)
 # discovery. Must match BROADCAST_ID in the firmware's variables_and_parameters.h.
 BROADCAST_ID = 0
 
-# Registry mapping a friendly label to a board's chip-derived id. Firmware now
-# derives each board's id from its SAMD21 serial number, so ids are large and
-# not human-chosen. Populate this once per board using scripts/maintenance/identify_board.py
-BOARD_REGISTRY: dict[str, int] = {
-    "board0": 855203507,
-    "board1": 1183344710,
-    "board2": 2018580162,
-    "board3": 1159118204,
-    "board4": 1632502456,
-}
-
-# Reverse lookup: chip id -> label. Rebuilt from BOARD_REGISTRY; unknown ids
-# simply won't be present.
-BOARD_LABELS: dict[int, str] = {v: k for k, v in BOARD_REGISTRY.items()}
+# Which physical boards exist (BOARD_REGISTRY / BOARD_LABELS) lives in boards.py
+# — that's an inventory of one bench's hardware, not a property of the protocol,
+# and it changes whenever a board is swapped. Everything here is code-versioned.
 
 MAX_TRAJECTORY_ROWS = 20
 

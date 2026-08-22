@@ -3,7 +3,7 @@
 Firmware now derives each board's id from its SAMD21 serial number, so ids are
 large and not human-chosen. This utility scans serial ports (or a single --port),
 sends a broadcast whoami, and prints the id each board reports. Copy a printed id
-into delta_control.constants.BOARD_REGISTRY under a friendly label so the rest of
+into delta_control.boards.BOARD_REGISTRY under a friendly label so the rest of
 the host code can address that board by name.
 
 Sends only a whoami (no motion), so probing every port is safe.
@@ -13,7 +13,8 @@ import argparse
 
 from serial import Serial
 
-from delta_control.constants import BOARD_LABELS, DEFAULT_BAUD, DISCOVERY_TIMEOUT_S
+from delta_control.boards import BOARD_LABELS
+from delta_control.constants import DEFAULT_BAUD, DISCOVERY_TIMEOUT_S
 from delta_control.delta_array_env import discover_board_id, find_board_ports
 from delta_control.transport import ProtoTransport
 
