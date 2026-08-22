@@ -1,19 +1,19 @@
 {
-    "board_id": 1632502456,
+    "board_id": 351007952,
     "note": "Board 4. Biases seeded from characterize_breakaway (5-trial mean minus ~3 counts); deadband left at the firmware default (0.8mm) for the bias-first test. Retune once tested.",
     "brake_at_setpoint": true,
     "motors": [
-        {"deadband": 0.0001, "bias_back": 20, "bias_fwd": 29},
-        {"deadband": 0.0001, "bias_back": 21, "bias_fwd": 25},
-        {"deadband": 0.0001, "bias_back": 19, "bias_fwd": 21},
-        {"deadband": 0.0001, "bias_back": 34, "bias_fwd": 37},
-        {"deadband": 0.0001, "bias_back": 23, "bias_fwd": 30},
+        {"deadband": 0.0001, "bias_back": 25, "bias_fwd": 26},
+        {"deadband": 0.0001, "bias_back": 34, "bias_fwd": 33},
         {"deadband": 0.0001, "bias_back": 19, "bias_fwd": 19},
-        {"deadband": 0.0001, "bias_back": 27, "bias_fwd": 29},
-        {"deadband": 0.0001, "bias_back": 18, "bias_fwd": 21},
-        {"deadband": 0.0001, "bias_back": 31, "bias_fwd": 28},
-        {"deadband": 0.0001, "bias_back": 18, "bias_fwd": 18},
-        {"deadband": 0.0001, "bias_back": 44, "bias_fwd": 53},
-        {"deadband": 0.0001, "bias_back": 22, "bias_fwd": 31}
+        {"deadband": 0.0001, "bias_back": 20, "bias_fwd": 29},
+        {"deadband": 0.0001, "bias_back": 19, "bias_fwd": 22},
+        {"deadband": 0.0001, "bias_back": 39, "bias_fwd": 38},
+        {"deadband": 0.0001, "bias_back": 24, "bias_fwd": 31},
+        {"deadband": 0.0001, "bias_back": 29, "bias_fwd": 31},
+        {"deadband": 0.0001, "bias_back": 21, "bias_fwd": 22},
+        {"deadband": 0.0001, "bias_back": 27, "bias_fwd": 34},
+        {"deadband": 0.0001, "bias_back": 20, "bias_fwd": 27},
+        {"deadband": 0.0001, "bias_back": 23, "bias_fwd": 22}
     ]
 }

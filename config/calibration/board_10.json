@@ -1,0 +1,19 @@
+{
+    "board_id": 310932672,
+    "note": "Board 10. Biases seeded from characterize_breakaway (5-trial mean minus ~3 counts); deadband left at the firmware default (0.8mm) for the bias-first test. Retune once tested.",
+    "brake_at_setpoint": true,
+    "motors": [
+        {"deadband": 0.0001, "bias_back": 17, "bias_fwd": 22},
+        {"deadband": 0.0001, "bias_back": 22, "bias_fwd": 27},
+        {"deadband": 0.0001, "bias_back": 22, "bias_fwd": 22},
+        {"deadband": 0.0001, "bias_back": 17, "bias_fwd": 27},
+        {"deadband": 0.0001, "bias_back": 22, "bias_fwd": 22},
+        {"deadband": 0.0001, "bias_back": 27, "bias_fwd": 22},
+        {"deadband": 0.0001, "bias_back": 27, "bias_fwd": 27},
+        {"deadband": 0.0001, "bias_back": 17, "bias_fwd": 27},
+        {"deadband": 0.0001, "bias_back": 22, "bias_fwd": 22},
+        {"deadband": 0.0001, "bias_back": 27, "bias_fwd": 32},
+        {"deadband": 0.0001, "bias_back": 22, "bias_fwd": 22},
+        {"deadband": 0.0001, "bias_back": 32, "bias_fwd": 27}
+    ]
+}
