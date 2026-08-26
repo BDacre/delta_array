@@ -10,7 +10,7 @@ command, so the boards move (roughly) concurrently.
 
 import argparse
 
-from delta_control import DeltaArrayEnv
+from delta_control import DeltaArrayEnv, enforce_calibration
 from delta_control.constants import HOME_POSITION, NUM_MOTORS
 from delta_control.delta_array_env import delta  # shared PrismaticDelta (IK)
 
@@ -35,6 +35,7 @@ def run(target, motor_space) -> None:
     assert len(board_joints) == NUM_MOTORS, board_joints
 
     env = DeltaArrayEnv()  # every connected board, keyed by chip id
+    enforce_calibration(env)  # push per-board calibration + gate, or abort
     n = len(env.active_ids)
     print(f"{what} -> joints/delta {[round(j, 4) for j in per_delta]}")
     print(f"commanding {n} board(s) x {DELTAS_PER_BOARD} deltas = {n * DELTAS_PER_BOARD} deltas")

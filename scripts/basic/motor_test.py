@@ -7,7 +7,7 @@ returns to home, and closes the port.
 import argparse
 import time
 
-from delta_control import open_board
+from delta_control import enforce_calibration, open_board
 from delta_control.constants import NUM_MOTORS
 
 SETTLE_TIME = 2.0
@@ -19,6 +19,7 @@ DEFAULT_BOARD = None  # None auto-discovers; set a BOARD_REGISTRY label or raw i
 
 def run(port: str, board=None) -> None:
     env, agent = open_board(port, board)
+    enforce_calibration(env)  # push per-board calibration + gate, or abort
     print(f"opening {port}, using board id {env.active_ids[0]}")
 
     try:

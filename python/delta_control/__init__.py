@@ -19,9 +19,11 @@ from .delta_array_env import (
 from .transport import ProtoTransport
 from .calibration import (
     BoardCalibResult,
+    CalibrationError,
     apply_calibration,
     calibration_path,
     diff_calibration,
+    enforce_calibration,
     load_calibration,
     load_calibration_file,
 )
@@ -30,6 +32,7 @@ __all__ = [
     "ALL_AGENT_IDS",
     "BROADCAST_ID",
     "BoardCalibResult",
+    "CalibrationError",
     "DEFAULT_ACTIVE_AGENT_IDS",
     "DeltaArrayAgent",
     "DeltaArrayEnv",
@@ -37,6 +40,7 @@ __all__ = [
     "apply_calibration",
     "calibration_path",
     "diff_calibration",
+    "enforce_calibration",
     "discover_board_id",
     "find_board_ports",
     "list_board_ports",

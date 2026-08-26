@@ -12,7 +12,7 @@ Boards in the registry that aren't currently connected are skipped with a note.
 
 import time
 
-from delta_control import DeltaArrayEnv
+from delta_control import DeltaArrayEnv, enforce_calibration
 from delta_control.boards import BOARD_REGISTRY, board_order
 from delta_control.constants import NUM_MOTORS
 
@@ -38,6 +38,7 @@ def access_board(label, agent):
 
 def run() -> None:
     env = DeltaArrayEnv()  # open every connected board, agents keyed by chip id
+    enforce_calibration(env)  # push per-board calibration + gate, or abort
     print(f"connected board ids: {env.active_ids}")
     try:
         for label in board_order():

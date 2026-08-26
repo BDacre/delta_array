@@ -2,7 +2,7 @@
 import math
 import time
 
-from delta_control import open_board
+from delta_control import enforce_calibration, open_board
 
 SETTLE_TIME = 1.0
 
@@ -22,6 +22,7 @@ def _inclusive_range(start: float, stop: float, step: float) -> list[float]:
 
 def run(port: str, board=None) -> None:
     env, agent = open_board(port, board)
+    enforce_calibration(env)  # push per-board calibration + gate, or abort
     print(f"opening {port}, using board id {env.active_ids[0]}")
 
     try:

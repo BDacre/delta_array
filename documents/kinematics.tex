@@ -1,0 +1,49 @@
+\section{Delta Kinematics}
+\label{sec:kinematics}
+
+Each cell is a translational delta driven by three prismatic actuators whose
+axes are vertical and mutually parallel. The parallelogram limbs hold the
+moving platform parallel to the base, so the platform translates in three
+degrees of freedom without rotating and each limb reduces to a single distance
+constraint.
+
+Let the base frame be centred on the base-triangle centroid with
+$\hat{\mathbf{z}}$ along the actuator axes, and index the limbs by azimuth
+$\theta_i\in\{\pi/2,\,-\pi/6,\,7\pi/6\}$, $\hat{\mathbf{u}}_i=[\cos\theta_i,\
+\sin\theta_i]^{\!\top}$. Writing $R_b$ and $R_p$ for the base and platform
+circumradii, $q_i$ for the prismatic coordinates and $\mathbf{x}=[x,y,z]^{\!\top}$
+for the platform centre, the carriage and platform joints of limb $i$ are
+$\mathbf{c}_i=R_b[\hat{\mathbf{u}}_i^{\!\top},0]^{\!\top}+q_i\hat{\mathbf{z}}$ and
+$\mathbf{p}_i=\mathbf{x}+R_p[\hat{\mathbf{u}}_i^{\!\top},0]^{\!\top}$, and for
+limbs of length $L$ the loop closure is
+\begin{equation}
+\label{eq:closure}
+\|\mathbf{p}_i-\mathbf{c}_i\|=L,\qquad i=1,2,3 .
+\end{equation}
+
+Base anchor and platform joint share the azimuth $\theta_i$, so their
+difference collapses onto $\hat{\mathbf{u}}_i$ and \eqref{eq:closure} separates
+into three scalar equations $\rho_i^2+(z-q_i)^2=L^2$, with
+$\rho_i=\|[x,y]^{\!\top}+(R_p-R_b)\hat{\mathbf{u}}_i\|$. The inverse kinematics
+is therefore decoupled and closed-form,
+\begin{equation}
+\label{eq:ik}
+q_i=z-\sqrt{L^2-\rho_i^2},
+\end{equation}
+the negative branch placing each carriage below its platform joint, which is
+the assembly mode of the prototype. A pose is reachable when $\rho_i\le L$ and
+$q_i\in[q_{\min},q_{\max}]$ for every limb.
+
+The forward map follows by absorbing the platform offset into the carriage
+position, $\mathbf{s}_i=\mathbf{c}_i-R_p[\hat{\mathbf{u}}_i^{\!\top},0]^{\!\top}$,
+which turns \eqref{eq:closure} into $\|\mathbf{x}-\mathbf{s}_i\|=L$: the
+platform centre lies at the intersection of three spheres of equal radius. This
+trilateration admits the standard closed-form solution, and of its two mirrored
+roots the one placing the platform above the plane of the $\mathbf{s}_i$ is
+taken, consistent with \eqref{eq:ik}.
+
+The prototype uses $s_b=21.39$\,mm, $s_p=12.00$\,mm and $L=56.00$\,mm, with
+$93$\,mm of prismatic travel; the tool tip sits $24$\,mm above the platform
+plane along its (invariant) normal, and is reported in place of $\mathbf{x}$ by
+both maps. The resulting workspace spans $93$\,mm vertically and reaches a
+maximum radius of $53$\,mm.

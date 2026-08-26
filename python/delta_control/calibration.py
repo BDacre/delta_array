@@ -231,3 +231,66 @@ def diff_calibration(live, calib, *, deadband_tol=DEADBAND_TOL):
             f"brake_at_setpoint: JSON {bool(want_brake)} "
             f"!= board {live['brake_at_setpoint']}")
     return mismatches
+
+
+class CalibrationError(RuntimeError):
+    """One or more connected boards are not running their per-motor calibration."""
+
+
+def _describe_board(result):
+    """One (or more) human-readable lines for a not-ok BoardCalibResult."""
+    from .boards import BOARD_LABELS
+
+    label = BOARD_LABELS.get(result.board_id)
+    name = f"{result.board_id} ({label})" if label else str(result.board_id)
+    if result.error:  # no file, id clash, or firmware too old to report config
+        return f"  board {name}: {result.error}"
+    lines = [f"  board {name}: {len(result.mismatches)} config mismatch(es)"]
+    lines += [f"      {m}" for m in result.mismatches]
+    return "\n".join(lines)
+
+
+def enforce_calibration(env, *, calib_dir=None, quiet=False):
+    """Provision every connected board and verify it, or raise CalibrationError.
+
+    The gate every script that MOVES the array should run immediately after
+    opening the env and before commanding any motion. Firmware config is
+    RAM-only, so a flash or power-cycle silently reverts a board to compiled
+    defaults (brake off, 0.8 mm deadband, zero bias) -- a different deadband and
+    bias, which distorts an open-loop trajectory without ever erroring.
+
+    Config-only -- no motion. Applies each board's calibration JSON
+    (``env.provision``) then reads every board back write-free
+    (``env.check_calibration``) as a hard gate. Returns the provision report
+    (``{board_id: BoardCalibResult}``) on success; raises ``CalibrationError`` --
+    after closing ``env`` to release the serial ports -- if any board is not
+    running its calibration.
+
+    This is the same call path as the provision_array CLI, so a script and the
+    CLI cannot disagree about what "calibrated" means. Do NOT use it in the
+    tools that measure or set calibration (characterize_*, sweep_deadband,
+    apply_calibration) or in raw-PWM diagnostics: those deliberately run a board
+    off its calibration, and gating them would be circular.
+
+    Usage, right after opening the env::
+
+        env = DeltaArrayEnv()
+        enforce_calibration(env)   # provision + gate, or raise before any motion
+    """
+    report = env.provision(calib_dir=calib_dir)         # apply each board's JSON + verify
+    gate = env.check_calibration(calib_dir=calib_dir)   # read-only confirmation, no writes
+
+    bad = [r for r in gate.values() if not r.ok]
+    if bad:
+        env.close()  # release the ports; we abort before commanding any motion
+        detail = "\n".join(_describe_board(r) for r in bad)
+        raise CalibrationError(
+            f"{len(bad)} of {len(gate)} board(s) are not running their "
+            f"calibration (fix the board_<id>.json under config/calibration/, "
+            f"then rerun):\n{detail}"
+        )
+
+    if not quiet:
+        print(f"  calibration verified on {len(report)} board(s): "
+              f"{', '.join(str(b) for b in sorted(report))}")
+    return report

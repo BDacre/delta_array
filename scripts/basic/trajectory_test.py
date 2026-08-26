@@ -10,7 +10,7 @@ import time
 
 import numpy as np
 
-from delta_control import open_board
+from delta_control import enforce_calibration, open_board
 from delta_control.constants import MAX_TRAJECTORY_ROWS, NUM_MOTORS
 
 SETTLE_TIME = 2.0
@@ -34,6 +34,7 @@ def sine_trajectory(num_rows: int) -> np.ndarray:
 
 def run(port: str, board=None) -> None:
     env, agent = open_board(port, board)
+    enforce_calibration(env)  # push per-board calibration + gate, or abort
     print(f"opening {port}, using board id {env.active_ids[0]}")
 
     try:

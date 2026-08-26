@@ -1,0 +1,133 @@
+\section{Kinematics}
+\label{sec:kinematics}
+
+Each cell is a translational parallelogram delta actuated by three prismatic
+joints whose axes are vertical and mutually parallel. The parallelogram limbs
+hold the moving platform parallel to the base, so the platform has three
+translational degrees of freedom and no orientation state, and each limb reduces
+to a single distance constraint.
+
+\subsection{Notation}
+
+Let the base frame be centred on the base-triangle centroid with
+$\hat{\mathbf{z}}$ along the actuator axes, and index the limbs by azimuth
+$\theta_i \in \{\pi/2,\, -\pi/6,\, 7\pi/6\}$, $\hat{\mathbf{u}}_i =
+[\cos\theta_i,\ \sin\theta_i]^{\!\top}$. With base and platform circumradii
+$R_b=s_b/\sqrt3$ and $R_p=s_p/\sqrt3$, prismatic coordinates
+$\mathbf{q}=[q_1,q_2,q_3]^{\!\top}$ and platform centre
+$\mathbf{x}=[x,y,z]^{\!\top}$, the carriage and platform joints of limb $i$ are
+\begin{equation}
+\mathbf{c}_i = R_b \begin{bmatrix}\hat{\mathbf{u}}_i\\0\end{bmatrix} + q_i\hat{\mathbf{z}},
+\qquad
+\mathbf{p}_i = \mathbf{x} + R_p \begin{bmatrix}\hat{\mathbf{u}}_i\\0\end{bmatrix}.
+\end{equation}
+The tool tip is offset from the platform plane by a constant $d$ along the
+invariant platform normal, $\mathbf{x}_{\text{ee}}=\mathbf{x}+d\hat{\mathbf{z}}$.
+For limbs of length $L$, loop closure is
+\begin{equation}
+\label{eq:closure}
+\|\mathbf{p}_i-\mathbf{c}_i\| = L, \qquad i=1,2,3.
+\end{equation}
+
+\subsection{Inverse Kinematics}
+
+Base anchor and platform joint share the azimuth $\theta_i$, so their difference
+collapses onto $\hat{\mathbf{u}}_i$ and the horizontal part of
+\eqref{eq:closure} depends only on $R_p-R_b$:
+\begin{equation}
+\label{eq:rho}
+\rho_i^2 = \big\|\,[x,\,y]^{\!\top} + (R_p-R_b)\,\hat{\mathbf{u}}_i \,\big\|^2 .
+\end{equation}
+Equation \eqref{eq:closure} then separates into three scalar equations
+$\rho_i^2+(z-q_i)^2=L^2$, each in one actuator, giving the closed-form,
+fully decoupled inverse map
+\begin{equation}
+\label{eq:ik}
+q_i = \big(z_{\text{ee}}-d\big) - \sqrt{L^2-\rho_i^2}.
+\end{equation}
+The negative branch places each carriage below its platform joint, which is the
+assembly mode of the prototype and renders the solution unique. The reachable
+set is $\{\mathbf{x} : \rho_i \le L,\ q_i \in [q_{\min},q_{\max}]\ \forall i\}$.
+
+\subsection{Forward Kinematics}
+
+Absorbing the platform offset into the carriage position,
+$\mathbf{s}_i = \mathbf{c}_i - R_p[\hat{\mathbf{u}}_i^{\!\top},0]^{\!\top}$,
+turns \eqref{eq:closure} into $\|\mathbf{x}-\mathbf{s}_i\|=L$: the platform
+centre lies at the intersection of three spheres of equal radius, centred on a
+vertical prism of circumradius $R_b-R_p$ at heights $q_i$. Let
+$\mathbf{v}_2=\mathbf{s}_2-\mathbf{s}_1$, $\mathbf{v}_3=\mathbf{s}_3-\mathbf{s}_1$,
+and build the orthonormal frame
+\begin{equation}
+\hat{\mathbf{e}}_1=\frac{\mathbf{v}_2}{D},\quad
+\hat{\mathbf{e}}_2=\frac{\mathbf{v}_3-\alpha\hat{\mathbf{e}}_1}{\beta},\quad
+\hat{\mathbf{e}}_3=\hat{\mathbf{e}}_1\times\hat{\mathbf{e}}_2,
+\end{equation}
+with $D=\|\mathbf{v}_2\|$, $\alpha=\mathbf{v}_3\!\cdot\!\hat{\mathbf{e}}_1$ and
+$\beta=\|\mathbf{v}_3-\alpha\hat{\mathbf{e}}_1\|$. Because the three radii are
+equal, the pairwise sphere differences are linear and solve immediately:
+\begin{equation}
+\label{eq:fk}
+\mathbf{x}=\mathbf{s}_1+X\hat{\mathbf{e}}_1+Y\hat{\mathbf{e}}_2+Z\hat{\mathbf{e}}_3,
+\end{equation}
+\begin{equation}
+X=\frac{D}{2},\quad
+Y=\frac{\|\mathbf{v}_3\|^2-\alpha D}{2\beta},\quad
+Z=\sigma\sqrt{L^{2}-X^{2}-Y^{2}},
+\end{equation}
+where $\sigma=\operatorname{sgn}(\hat{\mathbf{e}}_3^{\!\top}\hat{\mathbf{z}})$
+selects the branch with the platform above the plane of the joint centres,
+consistent with \eqref{eq:ik}. The map is defined whenever $\beta\neq0$ and
+$X^2+Y^2\le L^2$. The first condition is structural: $D\beta =
+\|\mathbf{v}_2\times\mathbf{v}_3\| \ge 2A$, where $A$ is the constant area of
+the equilateral triangle onto which the centres project, so collinearity cannot
+occur. The second delimits the set of actuator triples admitting a rigid
+platform.
+
+\subsection{Jacobian and Singularities}
+
+Differentiating \eqref{eq:closure} with limb vectors
+$\mathbf{w}_i=\mathbf{p}_i-\mathbf{c}_i$ gives
+$\mathbf{w}_i^{\!\top}\dot{\mathbf{x}}=w_{i,z}\dot{q}_i$, where
+$w_{i,z}=\sqrt{L^2-\rho_i^2}$, hence
+$\mathbf{J}_q\dot{\mathbf{q}}=\mathbf{J}_x\dot{\mathbf{x}}$ with
+\begin{equation}
+\label{eq:jac}
+\mathbf{J}_q=\operatorname{diag}(w_{i,z}),\qquad
+\mathbf{J}_x=\big[\mathbf{w}_1\ \mathbf{w}_2\ \mathbf{w}_3\big]^{\!\top}.
+\end{equation}
+Inverse-kinematic singularities ($\det\mathbf{J}_q=0$) require a horizontal limb,
+$\rho_i\to L$; direct-kinematic singularities ($\det\mathbf{J}_x=0$) require the
+three limb vectors to become linearly dependent. Sampled over the reachable set,
+$\min_i w_{i,z}\ge1.78$\,mm and $|\det\mathbf{J}_x|\ge4.3\times10^{-6}$\,m$^3$,
+so the workspace is singularity-free.
+
+At the home pose $\mathbf{J}=\mathbf{J}_x^{-1}\mathbf{J}_q$ has singular values
+$(8.39,\,8.39,\,0.577)$ and condition number $14.5$, rising to $135$ at the
+workspace boundary. Vertical motion is the unity-gain common mode,
+$\partial z/\partial q_i=1/3$, whereas differential actuation is amplified
+radially by $\approx\!6.8$. Actuator resolution and error therefore appear in
+the plane roughly an order of magnitude larger than along $\hat{\mathbf{z}}$,
+which bounds lateral placement accuracy.
+
+\begin{table}[t]
+\caption{Kinematic parameters of one delta.}
+\label{tab:params}
+\centering
+\begin{tabular}{llr}
+\toprule
+Symbol & Quantity & Value (mm) \\
+\midrule
+$s_b$ & base triangle side & 21.39 \\
+$s_p$ & platform triangle side & 12.00 \\
+$L$   & limb length & 56.00 \\
+$d$   & platform plane to tool tip & 24.00 \\
+$q_{\min},q_{\max}$ & prismatic travel & 5.0,\ 98.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The limbs attach at the midpoints of the end-effector triangle's sides, so by
+the midsegment theorem $s_p$ is half the end-effector side length. Home is taken
+at mid-travel, placing the tip at $(0,0,131.49)$\,mm; the workspace spans
+$z\in[85,178]$\,mm on the central axis, with a maximum radius of $53$\,mm.

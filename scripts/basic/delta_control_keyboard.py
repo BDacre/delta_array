@@ -15,7 +15,7 @@ import termios
 import time
 import tty
 
-from delta_control import open_board
+from delta_control import enforce_calibration, open_board
 from delta_control.constants import MAX_JOINT_POS, MIN_JOINT_POS
 
 # Single-byte letter keys only (arrow keys are multi-byte escape sequences and
@@ -122,6 +122,7 @@ def control_loop(agent, step):
 
 def run(port, board, step):
     env, agent = open_board(port, board)
+    enforce_calibration(env)  # push per-board calibration + gate, or abort
     print(f"opening {port}, using board id {env.active_ids[0]}")
 
     fd = sys.stdin.fileno()

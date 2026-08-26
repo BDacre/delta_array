@@ -11,7 +11,7 @@ registry board that isn't connected is skipped.
 import argparse
 import random
 
-from delta_control import DeltaArrayEnv
+from delta_control import DeltaArrayEnv, enforce_calibration
 from delta_control.boards import BOARD_REGISTRY, board_order
 from delta_control.constants import NUM_MOTORS
 
@@ -28,6 +28,7 @@ def run(low=0.01, high=0.03, seed=None) -> None:
     print(f"{n_deltas} random delta heights in [{low}, {high}] (seed={seed})")
 
     env = DeltaArrayEnv()  # every connected board, keyed by chip id
+    enforce_calibration(env)  # push per-board calibration + gate, or abort
     try:
         for i, label in enumerate(labels):
             bid = BOARD_REGISTRY[label]
