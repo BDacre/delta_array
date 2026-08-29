@@ -6,10 +6,8 @@ import numpy as np
 PI = math.pi
 
 class PrismaticDelta:
-    # Azimuths of the three equilateral-triangle vertices: vertex 1 on +y, then
-    # -120 deg and +120 deg from it. Shared by the base, the platform and IK/FK
-    # so every part of the mechanism uses a consistent vertex ordering.
-    VERTEX_ANGLES = (math.pi / 2, -math.pi / 6, 7 * math.pi / 6)
+
+    VERTEX_ANGLES = (-math.pi / 6, 7 * math.pi / 6, math.pi / 2)
 
     def __init__(self, platform_side_length, base_side_length, lower_leg_length, ee_z_offset=0.0):
 
