@@ -36,8 +36,8 @@ EE_Z_OFFSET = TIP_HEIGHT + PLATFORM_TRIANGLE_HEIGHT
 # time. The effect was a home pose 5 mm off centre, leaving 41.75 mm of travel above
 # it and 51.75 mm below. Anything that opens symmetrically about home (the paraboloid
 # in delta_array_connected_manipulation, tilt, saddle) was clipped by the short side
-# while the long side went unused.
-HOME_POSITION = (0.0, 0.0, 0.13148692036511053)
+# while the long side went unused. +2mm tip rounding height.
+HOME_POSITION = (0.0, 0.0, 0.13348692036511053)
 
 # Physical layout of robots in the 8x8 array (meters).
 # Triangular grid: every other column is offset by half the row pitch.
