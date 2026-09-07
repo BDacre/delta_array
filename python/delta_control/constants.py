@@ -74,6 +74,13 @@ MAX_HUNT_BYTES = 4096
 
 DEFAULT_BAUD = 57600
 
+# Ceiling on threads used by DeltaArrayEnv's parallel board I/O (see fan_out).
+# One thread per board is the natural size — each blocks on its own serial read,
+# so they cost memory, not CPU — and 16 boards is this array. The cap only bites
+# on an array far larger than one bench's, where thousands of idle threads would
+# start costing more than the serialisation they avoid.
+MAX_PARALLEL_WORKERS = 32
+
 # Acknowledgement read timeout for command sends.
 # Bound by firmware MOVE_TIMEOUT_MS (5000) since the firmware can't service
 # new frames mid-move; small headroom for round-trip latency.

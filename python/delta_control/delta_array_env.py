@@ -1,6 +1,9 @@
 import glob
+import threading
 import time
 import warnings
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from math import pi
 
 import numpy as np
@@ -19,6 +22,7 @@ from .constants import (
     DISCOVERY_TIMEOUT_S,
     HOME_POSITION,
     LEG_LENGTH,
+    MAX_PARALLEL_WORKERS,
     BASE_TRIANGLE_SIDE_LEN,
     PLATFORM_TRIANGLE_SIDE_LEN,
     EE_Z_OFFSET,
@@ -98,6 +102,65 @@ def discover_board_id(transport, *, attempts=3):
     return None
 
 
+class _FanOut:
+    """Handle for a fan-out that may still be running (DeltaArrayEnv.fan_out_async).
+
+    Holds one future per board and joins them into a single
+    ``{board_id: result_or_exception}`` dict. Constructed with ``done=`` instead
+    when the work already ran (serial mode), so callers see one shape either way.
+    """
+
+    def __init__(self, futures, *, done=None):
+        self._futures = futures or {}
+        self._done = done
+
+    def done(self):
+        """True if joining now would not block."""
+        return self._done is not None or all(f.done() for f in self._futures.values())
+
+    def result(self, timeout=None):
+        """Join and return ``{board_id: result_or_exception}``.
+
+        ``timeout`` is a deadline for the whole batch, shared across boards, not
+        a per-board allowance. Boards that miss it get a TimeoutError in the
+        dict; their calls keep running in the pool (a blocked serial read cannot
+        be interrupted from outside) and still hold their agent's lock until the
+        underlying read times out.
+        """
+        if self._done is not None:
+            return dict(self._done)
+        deadline = None if timeout is None else time.monotonic() + timeout
+        results = {}
+        for board_id, future in self._futures.items():
+            remaining = (None if deadline is None
+                         else max(0.0, deadline - time.monotonic()))
+            try:
+                results[board_id] = future.result(timeout=remaining)
+            except FutureTimeoutError:
+                future.cancel()  # only helps if it has not started yet
+                results[board_id] = TimeoutError(
+                    f"board {board_id} did not answer within the {timeout}s batch timeout"
+                )
+            except Exception as exc:
+                results[board_id] = exc
+        return results
+
+
+def _raise_first(results):
+    """Return a fan_out dict, or raise the first exception it captured.
+
+    For the operations that predate fan_out (reset, provision) and whose
+    contract is to fail loudly: fan_out captures per board, this converts back.
+    Boards are visited in id order, so which exception surfaces is deterministic
+    rather than a race between threads.
+    """
+    for board_id in sorted(results):
+        value = results[board_id]
+        if isinstance(value, BaseException):
+            raise value
+    return results
+
+
 class DeltaArrayEnv:
     """Controls one or more delta boards, one board per serial port.
 
@@ -121,11 +184,22 @@ class DeltaArrayEnv:
         (does NOT write) if any board is not running its calibration JSON, so a
         board silently on firmware defaults is caught at connect. Call
         env.provision() to fix.
+    parallel:
+      * False (default) -> every whole-array operation talks to one board at a
+        time, exactly as before.
+      * True -> reset(), provision(), check_calibration() and the *_all helpers
+        fan out over a thread pool, one thread per board. Flip it at any time
+        (``env.parallel = True``); it is read per call, not cached.
     """
 
     def __init__(self, ports=None, *, ids=None, baud=DEFAULT_BAUD,
-                 verify_calibration=False):
+                 verify_calibration=False, parallel=False):
         wanted = _resolve_id_filter(ids)
+        # Set before the discovery loop: close() runs on the __init__ error path
+        # and must find these already bound.
+        self.parallel = bool(parallel)
+        self._pool = None
+        self._pool_lock = threading.Lock()
 
         if ports is None:
             candidates = list_board_ports()
@@ -201,12 +275,195 @@ class DeltaArrayEnv:
         # The serial port a given board id / label was found on.
         return self._conns[_resolve_board_id(id_or_label)][0]
 
-    def reset(self):
+    # ---- parallel board I/O -------------------------------------------------
+    #
+    # Each board sits on its own serial port, so a whole-array round trip costs
+    # 16 x one board sequentially (~660 ms at ~41 ms/board) and roughly one
+    # board's worth threaded. The ports are baud-limited, not contended: 16 x
+    # 57600 baud is ~92 kB/s aggregate against USB Full Speed's 1.5 MB/s, so
+    # they overlap almost perfectly (measured 12.1x on the 16-board rig).
+    #
+    # THE INVARIANT: one thread per agent, never two threads on one agent. An
+    # agent's _send is write-then-read on a single port, so two concurrent calls
+    # on it would interleave frames and corrupt both replies. fan_out enforces
+    # this by construction (it dispatches over distinct board ids) and
+    # DeltaArrayAgent holds a per-agent lock as a backstop.
+    #
+    # NOT atomic. Parallel writes shrink the window in which the array is in a
+    # mixed state from ~660 ms to ~55 ms; they do not remove it. True
+    # simultaneity would need an armed/trigger protocol in the firmware.
+
+    def _executor(self):
+        """The board-I/O thread pool, created on first parallel use.
+
+        One pool for the env's lifetime, not one per call: 16 threads cost a few
+        hundred microseconds to spin up, which is pure waste repeated at 5 Hz,
+        and a persistent pool is what lets fan_out_async start a read, do
+        something else (a camera round), and join it afterwards.
+        """
+        with self._pool_lock:
+            if self._pool is None:
+                workers = max(1, min(len(self.agents), MAX_PARALLEL_WORKERS))
+                self._pool = ThreadPoolExecutor(
+                    max_workers=workers, thread_name_prefix="delta-io"
+                )
+            return self._pool
+
+    def _resolve_ids(self, ids):
+        """Normalise an ids/labels selection to a list of connected board ids."""
+        if ids is None:
+            return list(self.active_ids)
+        resolved = [_resolve_board_id(x) for x in ids]
+        missing = [b for b in resolved if b not in self.agents]
+        if missing:
+            raise KeyError(
+                f"boards {missing} are not connected; "
+                f"active ids: {list(self.active_ids)}"
+            )
+        return resolved
+
+    def fan_out(self, fn, ids=None, *, timeout=None, parallel=None):
+        """Run ``fn(agent)`` once per board and collect ``{board_id: result}``.
+
+        The primitive the *_all helpers are built on, public because consumers
+        need board-wide operations this library has not thought of::
+
+            errs = env.fan_out(lambda a: a.set_config(brake_at_setpoint=True))
+
+        Concurrency follows ``env.parallel`` unless ``parallel=`` overrides it
+        for this call. Both modes have IDENTICAL semantics — only the wall clock
+        differs — so a consumer can develop against the serial path and flip the
+        flag.
+
+        Exceptions are CAPTURED, not raised: a board that times out or rejects a
+        command lands in the dict as the exception instance, and the other
+        fifteen boards' results survive. Check with::
+
+            bad = {b: r for b, r in results.items() if isinstance(r, Exception)}
+
+        A return value is passed through untouched, including the ones that
+        encode failure without raising — get_joint_positions returns the last
+        COMMANDED vector when a board goes quiet, get_telemetry returns None.
+        Flattening those into exceptions here would hide the difference, which
+        is exactly the difference a caller diagnosing a board needs.
+
+        ``timeout`` bounds the WHOLE batch (it is not ACK_TIMEOUT_S, which
+        bounds one serial read): boards that have not answered by then get a
+        TimeoutError in the dict. Default None waits. Note that a timed-out
+        board's call keeps running in its thread — it holds that agent's lock
+        until the board answers or its own read times out, so the next call on
+        that one board blocks; the other fifteen are unaffected. In serial mode
+        the deadline can only be checked between boards, so it skips the boards
+        not yet reached rather than interrupting the one in flight.
+        """
+        ids = self._resolve_ids(ids)
+        if parallel is None:
+            parallel = self.parallel
+
+        if not parallel or len(ids) < 2:
+            deadline = None if timeout is None else time.monotonic() + timeout
+            results = {}
+            for board_id in ids:
+                if deadline is not None and time.monotonic() >= deadline:
+                    results[board_id] = TimeoutError(
+                        f"batch timeout ({timeout}s) reached before board {board_id}"
+                    )
+                    continue
+                try:
+                    results[board_id] = fn(self.agents[board_id])
+                except Exception as exc:
+                    results[board_id] = exc
+            return results
+
+        return self.fan_out_async(fn, ids, parallel=True).result(timeout=timeout)
+
+    def fan_out_async(self, fn, ids=None, *, parallel=None):
+        """Start a fan_out and return a handle to join later.
+
+        For overlapping board I/O with unrelated work — the reason the pool is
+        persistent. A closed loop that reads the array and runs a camera round
+        pays for the slower of the two instead of their sum::
+
+            pending = env.fan_out_async(lambda a: a.get_telemetry())
+            frame = camera.grab()               # ~110 ms, overlapped
+            telemetry = pending.result()        # {board_id: dict|None|Exception}
+
+        Same capture-don't-raise contract as fan_out. In serial mode (or with
+        one board) the work runs to completion here and the handle just holds
+        the finished dict, so the API is uniform and only the overlap is lost.
+        """
+        ids = self._resolve_ids(ids)
+        if parallel is None:
+            parallel = self.parallel
+        if not parallel or len(ids) < 2:
+            return _FanOut(None, done=self.fan_out(fn, ids, parallel=False))
+        pool = self._executor()
+        return _FanOut({b: pool.submit(fn, self.agents[b]) for b in ids})
+
+    def move_joint_positions_all(self, by_board, *, timeout=None, parallel=None):
+        """Command several boards at once: ``{board: joints} -> {board: None|Exception}``.
+
+        Keys are board ids or BOARD_REGISTRY labels; each value is a (12,) joint
+        vector or an (N, 12) trajectory, exactly as move_joint_position takes.
+
+        Every vector is validated and clipped BEFORE any board is commanded, so
+        a malformed pose raises (AssertionError / KeyError) with the array still
+        where it was. Once the fan-out starts, per-board failures are captured:
+        a board whose ACK never arrives is a CommandError in the returned dict,
+        and a successful entry (None) means the board ACCEPTED the frame — not
+        that the move completed. A motor that cannot reach its setpoint within
+        the firmware's MOVE_TIMEOUT_MS releases and coasts, having already
+        ACKed; get_telemetry's error/pwm is the only way to see that.
+
+        Not atomic — see the section comment above.
+        """
+        prepared = {
+            _resolve_board_id(k): DeltaArrayAgent.prepare_joint_positions(v)
+            for k, v in by_board.items()
+        }
+        ids = self._resolve_ids(prepared)  # raises before anything moves
+        return self.fan_out(
+            lambda agent: agent.move_joint_position(prepared[agent.robot_id]),
+            ids, timeout=timeout, parallel=parallel,
+        )
+
+    def get_joint_positions_all(self, ids=None, *, timeout=None, parallel=None):
+        """Read every board's joint positions: ``{board_id: [12 floats]}``.
+
+        Beware what a value means: get_joint_positions returns the last
+        COMMANDED vector when a board does not answer, so a silent board reads
+        back as one tracking perfectly. Use get_telemetry_all when you need to
+        distinguish those.
+        """
+        return self.fan_out(lambda a: a.get_joint_positions(), ids,
+                            timeout=timeout, parallel=parallel)
+
+    def get_telemetry_all(self, ids=None, *, timeout=None, parallel=None):
+        """Read every board's telemetry: ``{board_id: {position, error, pwm}}``.
+
+        Prefer this over get_joint_positions_all for anything that has to trust
+        the numbers: a board that does not answer yields None rather than a
+        stale command echo, and error/pwm (0 = released) are the only evidence
+        that a commanded move actually happened.
+        """
+        return self.fan_out(lambda a: a.get_telemetry(), ids,
+                            timeout=timeout, parallel=parallel)
+
+    def reset(self, *, parallel=None):
+        """Send every board to HOME_POSITION.
+
+        Follows env.parallel. Consider leaving this one sequential even when the
+        rest of the loop is parallel: staggering is desirable here, since 16
+        boards slamming to HOME at once draws the peak current of 192 motors
+        starting together.
+
+        Raises the first per-board failure (CommandError), like the sequential
+        loop it replaces. Use fan_out directly to survey all sixteen instead.
+        """
         pt = np.array(delta.ik(HOME_POSITION))
         jts = np.tile(pt, 4).tolist()
-
-        for i in self.active_ids:
-            self.agents[i].move_joint_position(jts)
+        _raise_first(self.fan_out(lambda a: a.move_joint_position(jts),
+                                  parallel=parallel))
 
     def _provision_board(self, board_id, *, apply, calib_dir):
         """Apply (optional) then read back and diff one board's calibration."""
@@ -250,8 +507,8 @@ class DeltaArrayEnv:
             assert all(r.ok for r in report.values()), \\
                 [r for r in report.values() if not r.ok]
         """
-        return {b: self._provision_board(b, apply=True, calib_dir=calib_dir)
-                for b in self.active_ids}
+        return _raise_first(self.fan_out(
+            lambda a: self._provision_board(a.robot_id, apply=True, calib_dir=calib_dir)))
 
     def check_calibration(self, *, calib_dir=None):
         """Read back and diff every connected board WITHOUT writing anything.
@@ -261,8 +518,8 @@ class DeltaArrayEnv:
         BoardCalibResult}``; ``result.ok is False`` on any mismatch (e.g. a board
         that reverted to firmware defaults after a power-cycle).
         """
-        return {b: self._provision_board(b, apply=False, calib_dir=calib_dir)
-                for b in self.active_ids}
+        return _raise_first(self.fan_out(
+            lambda a: self._provision_board(a.robot_id, apply=False, calib_dir=calib_dir)))
 
     def _warn_on_calibration_mismatch(self):
         """Read back every board and warn (no writes) if any isn't calibrated.
@@ -288,6 +545,15 @@ class DeltaArrayEnv:
     def close(self):
         # Release every serial port. Safe to call repeatedly, or on a partially
         # constructed env (e.g. from an error mid-__init__).
+        #
+        # Shut the I/O pool first and WAIT: a worker still mid-round-trip would
+        # otherwise read from a port we are about to close. wait=True blocks
+        # until every in-flight call returns, bounded by ACK_TIMEOUT_S per board
+        # since each worker is sitting in one serial read.
+        pool = getattr(self, "_pool", None)
+        if pool is not None:
+            self._pool = None
+            pool.shutdown(wait=True)
         for _port, transport in getattr(self, "_conns", {}).values():
             try:
                 transport.close()

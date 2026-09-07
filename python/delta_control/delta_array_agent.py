@@ -1,3 +1,5 @@
+import threading
+
 import numpy as np
 
 from . import delta_array_pb2
@@ -21,6 +23,17 @@ class CommandError(RuntimeError):
 
 
 class DeltaArrayAgent:
+    """Host-side handle for one board, owning that board's serial transport.
+
+    Distinct agents are independent — separate ports, no shared state — so
+    DeltaArrayEnv.fan_out can drive all 16 boards concurrently (see
+    delta_array_env). Two threads on ONE agent is the thing that must not
+    happen: `_send` is write-then-read on a single port, so interleaved calls
+    would splice two conversations together and corrupt both replies. `_lock`
+    serialises them instead (~100 ns uncontended), so misuse degrades to slow
+    rather than to silent garbage.
+    """
+
     def __init__(self, transport, robot_id):
         self.transport = transport
         self.robot_id = robot_id
@@ -30,13 +43,18 @@ class DeltaArrayAgent:
         self.max_joint_pos = MAX_JOINT_POS
         self.num_motors = NUM_MOTORS
         self.max_trajectory_rows = MAX_TRAJECTORY_ROWS
+        # Guards one request/reply round trip on this board's port. See the
+        # class docstring; held only for the duration of a single _send.
+        self._lock = threading.Lock()
 
     def _envelope(self):
         return delta_array_pb2.DeltaMessage(id=self.robot_id)
 
     def _send(self, msg):
-        self.transport.send(msg.SerializeToString())
-        payload = self.transport.read_frame()
+        encoded = msg.SerializeToString()
+        with self._lock:
+            self.transport.send(encoded)
+            payload = self.transport.read_frame()
         if payload is None:
             return None
         reply = delta_array_pb2.DeltaMessage()
@@ -67,7 +85,16 @@ class DeltaArrayAgent:
             name = delta_array_pb2.AckStatus.Name(status)
             raise CommandError(f"board {self.robot_id} rejected command: {name}")
 
-    def move_joint_position(self, desired_joint_positions):
+    @staticmethod
+    def prepare_joint_positions(desired_joint_positions):
+        """Validate and clip a joint command to the (N, 12) array actually sent.
+
+        Split out of move_joint_position so a batch caller
+        (DeltaArrayEnv.move_joint_positions_all) can check every board's vector
+        BEFORE any board moves: a coordinated pose that fails on board 12 after
+        eleven boards have already gone is worse than one that fails on nothing.
+        Idempotent — re-preparing a prepared array changes nothing.
+        """
         pos = np.atleast_2d(np.asarray(desired_joint_positions, dtype=float))
         assert pos.ndim == 2 and pos.shape[1] == NUM_MOTORS, (
             f"expected shape (12,) or (N, 12), got {pos.shape}"
@@ -75,7 +102,10 @@ class DeltaArrayAgent:
         assert 1 <= pos.shape[0] <= MAX_TRAJECTORY_ROWS, (
             f"trajectory length {pos.shape[0]} outside [1, {MAX_TRAJECTORY_ROWS}]"
         )
-        pos = np.clip(pos, MIN_JOINT_POS, MAX_JOINT_POS)
+        return np.clip(pos, MIN_JOINT_POS, MAX_JOINT_POS)
+
+    def move_joint_position(self, desired_joint_positions):
+        pos = self.prepare_joint_positions(desired_joint_positions)
         flat = pos.reshape(-1).tolist()
         msg = self._envelope()
         if pos.shape[0] == 1:
